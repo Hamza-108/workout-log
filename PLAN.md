@@ -93,7 +93,7 @@ The user approved deferring the physical install check until the core is usable.
 - [x] Unfinished workout survives app close/relaunch. (automated tests)
 - [x] Finished history preserves values and unit after template edits. (automated tests)
 - [x] Seven model/persistence tests and two UI workflow tests pass on an iPhone simulator.
-- [ ] Full Release IPA build/checks complete.
+- [x] Full Release IPA build/checks complete: [CI run](https://github.com/Hamza-108/workout-log/actions/runs/39341761147), [usable preview IPA](https://github.com/Hamza-108/workout-log/releases/tag/v0.2.0-preview).
 - [ ] Physical-device signing, offline use, accessibility sizes and decimal keyboard verified.
 - [ ] In-place IPA update preserves existing workout data.
 

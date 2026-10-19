@@ -6,7 +6,7 @@ A small native iPhone workout tracker, developed on Linux and compiled on GitHub
 
 ## Install on your iPhone
 
-1. Download `WorkoutLog-unsigned.ipa` from [Releases](https://github.com/Hamza-108/workout-log/releases). Before a release exists, use a successful [Actions run](https://github.com/Hamza-108/workout-log/actions): download the `WorkoutLog-unsigned` artifact and extract its ZIP in Files. GitHub artifact downloads require signing in.
+1. Download `WorkoutLog-unsigned.ipa` from the [usable 0.2 preview](https://github.com/Hamza-108/workout-log/releases/tag/v0.2.0-preview) or a newer [release](https://github.com/Hamza-108/workout-log/releases). The older `setup-preview` is only a placeholder. For branch builds, download and extract the `WorkoutLog-unsigned` ZIP from a successful [Actions run](https://github.com/Hamza-108/workout-log/actions); artifact downloads require signing in.
 2. With your existing SideStore VPN/setup working, open SideStore → My Apps → **+** and choose the `.ipa` from Files.
 3. Open **Workout Log** → create a template → add exercises → start a workout → add a set → finish → open History. Close and reopen during a workout to check Resume. CI tests this flow on a simulator; your device still needs the SideStore acceptance check.
 4. Refresh SideStore and this app before the seven-day expiry. Background refresh is best effort; verify expiry dates instead of assuming refresh will always work.
