@@ -31,6 +31,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          xcodebuild -runFirstLaunch
+          xcrun simctl list devices available
           xcodebuild -project WorkoutLog.xcodeproj -scheme WorkoutLog -showdestinations > "$RUNNER_TEMP/destinations.txt"
           cat "$RUNNER_TEMP/destinations.txt"
           simulator_id=$(sed -nE '/platform:iOS Simulator/ s/.*id:([0-9A-Fa-f-]{36}).*/\1/p' "$RUNNER_TEMP/destinations.txt" | head -n 1)
