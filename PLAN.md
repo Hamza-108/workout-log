@@ -12,7 +12,7 @@ Keep a straightforward record of what you lifted and how hard it felt, without f
 
 - Confirmed: iOS 26, SideStore already installed, free Apple Account, weight + reps + RPE per set, reusable templates.
 - Setup authorized: repository, a minimal SwiftUI app, CI smoke test, unsigned IPA packaging and this saved plan.
-- Workout features below are the next implementation phase, not functionality in the setup app. Confirm the device installation milestone before starting them.
+- User approved implementing the full usable core before the first on-phone test. The physical-device milestone is deferred, not claimed complete. CI continues to verify builds, validation, storage and the full simulator workflow.
 - Public repository: standard hosted macOS runner execution is free; artifact storage has separate limits. Private repositories also have included minutes, so public is a cost choice, not an absolute technical requirement.
 
 ## How
@@ -86,7 +86,7 @@ First, the setup IPA demonstrably installs through SideStore. Then implement tem
 
 ## Acceptance checklist
 
-- [ ] Setup CI smoke test and unsigned device build pass.
+- [x] Setup CI smoke test and unsigned device build pass (setup-preview).
 - [ ] User installs setup IPA through existing SideStore and confirms launch.
 - [ ] Templates support ordered exercises and survive relaunch.
 - [ ] Weight, reps and RPE 0–10 validate and save correctly.
