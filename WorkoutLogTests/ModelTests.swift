@@ -110,18 +110,38 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(try context.fetchCount(FetchDescriptor<WorkoutSession>()), 2)
     }
 
-    func testFailedChangeRollsBackInsteadOfAutosaving() throws {
-        let store = try container()
+    func testFailedChangeReloadsSavedDataInFreshContext() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutLog-failure-\(UUID()).store")
+        let store = try container(url: url)
         let context = store.mainContext
         let template = WorkoutTemplate(name: "Original", exercises: ["Bench"])
         try context.commit { context.insert(template) }
+        let session = try WorkoutSession.start(template: template, unit: .kg, in: context)
+        let set = LoggedSet(exercise: "Bench", weight: 20, reps: 8, rpe: 7)
+        try context.commit { try session.record(set) }
+        let failure = expectation(forNotification: .workoutSaveFailed, object: context)
         XCTAssertThrowsError(try context.commit {
             template.name = "Unsaved change"
+            session.sets = []
+            context.delete(session)
+            context.insert(WorkoutTemplate(name: "Never saved", exercises: ["Press"]))
             throw LogError(message: "Simulated failure")
         })
-        XCTAssertEqual(template.name, "Original")
+        wait(for: [failure], timeout: 1)
         XCTAssertFalse(context.hasChanges)
         XCTAssertFalse(context.autosaveEnabled)
+        // Do not reuse stale SwiftData objects after rollback; the app replaces the context too.
+        let fresh = ModelContext(store)
+        let templates = try fresh.fetch(FetchDescriptor<WorkoutTemplate>())
+        XCTAssertEqual(templates.count, 1)
+        XCTAssertEqual(templates.first?.name, "Original")
+        let sessions = try fresh.fetch(FetchDescriptor<WorkoutSession>())
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.sets, [set])
+        try fresh.save()
+        let reopened = try container(url: url)
+        XCTAssertEqual(try reopened.mainContext.fetch(FetchDescriptor<WorkoutTemplate>()).first?.name, "Original")
+        XCTAssertEqual(try reopened.mainContext.fetch(FetchDescriptor<WorkoutSession>()).first?.sets, [set])
     }
 
     func testPersistenceAfterReopen() throws {

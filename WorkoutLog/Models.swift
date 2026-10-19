@@ -120,15 +120,19 @@ final class WorkoutSession {
     }
 }
 
+extension Notification.Name {
+    static let workoutSaveFailed = Notification.Name("workoutSaveFailed")
+}
+
 extension ModelContext {
-    // Explicit saves and rollback keep a failed change from looking successful or autosaving later.
+    // SwiftData rollback can leave stale model values; the UI must discard this context on failure.
     func commit(_ change: () throws -> Void) throws {
         do {
             try change()
             try save()
         } catch {
-            processPendingChanges()
             rollback()
+            NotificationCenter.default.post(name: .workoutSaveFailed, object: self, userInfo: ["error": error.localizedDescription])
             throw error
         }
     }

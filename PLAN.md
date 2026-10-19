@@ -32,7 +32,7 @@ Keep a straightforward record of what you lifted and how hard it felt, without f
 - Template: UUID, name, ordered exercise names. Trim names, reject blank names and duplicate exercise names within one template. No global exercise catalog.
 - Session: UUID, start date, optional finish date, copied template name, ordered exercise-name snapshot, fixed weight unit (`kg` or `lb`), ordered set values. Each set has UUID, exercise name, nonnegative finite weight, positive integer reps and finite RPE in the inclusive range 0–10. Whole-number RPE steps initially.
 - `WorkoutLog/WorkoutLogApp.swift`: initialize the shared SwiftData container and present Templates / History navigation. Surface storage failures; never silently reset a store that cannot open.
-- Keep at most one unfinished workout. Explicitly save on starting a workout, adding/editing/deleting a set, changing a template and finishing a session. A save failure must show a useful error, not a false success. Resume an unfinished workout after app relaunch.
+- Keep at most one unfinished workout. Explicitly save on starting a workout, adding/editing/deleting a set, changing a template and finishing a session. A save failure must show a useful error, not a false success. Roll back and replace the editing context: simulator regression tests found that SwiftData can leave old model objects showing unsaved values after rollback. Resume an unfinished workout after app relaunch.
 - Template edits or deletion must never change existing sessions: sessions keep snapshots, not live template data. Store units on each session so a new unit preference cannot relabel old weights.
 - New app: no existing data to migrate. Do not wipe data on updates; later incompatible schema changes need a real migration.
 
@@ -82,7 +82,7 @@ Update the UI test with a small real flow: create template → add exercises →
 
 ## Smallest complete version
 
-First, the setup IPA demonstrably installs through SideStore. Then implement templates + persistent/resumable set logging + completed history, with validation and persistence tests. No unrequested fitness features.
+The user approved deferring the physical install check until the core is usable. Build templates + persistent/resumable set logging + completed history, with validation and persistence tests, then provide an IPA for that first on-phone check. No unrequested fitness features.
 
 ## Acceptance checklist
 
