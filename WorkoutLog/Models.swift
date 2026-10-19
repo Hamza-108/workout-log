@@ -127,6 +127,7 @@ extension ModelContext {
             try change()
             try save()
         } catch {
+            processPendingChanges()
             rollback()
             throw error
         }
