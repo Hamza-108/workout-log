@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-enum HomeDestination: Hashable { case data }
+enum HomeDestination: Hashable { case data, library }
 
 struct WorkoutHomeView: View {
     @Environment(\.modelContext) private var context
@@ -17,7 +17,12 @@ struct WorkoutHomeView: View {
         TabView(selection: $tab) {
             NavigationStack(path: $templatesPath) {
                 TemplatesView(resumeID: $resumeID, routeMessage: $routeMessage)
-                    .navigationDestination(for: HomeDestination.self) { _ in DataTransferView() }
+                    .navigationDestination(for: HomeDestination.self) { destination in
+                        switch destination {
+                        case .data: DataTransferView()
+                        case .library: ExerciseLibraryView()
+                        }
+                    }
             }
                 .tabItem { Label("Templates", systemImage: "list.bullet.rectangle") }.tag(0)
             NavigationStack { HistoryView() }

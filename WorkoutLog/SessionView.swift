@@ -76,7 +76,7 @@ struct SessionView: View {
     }
 
     private func exerciseSection(_ exercise: String) -> some View {
-        Section(exercise) {
+        Section {
             ForEach(Array(session.rows(for: exercise).enumerated()), id: \.element.id) { index, row in
                 setButton(row, number: index + 1)
             }
@@ -84,6 +84,12 @@ struct SessionView: View {
                 selection = SetSelection(exercise: exercise)
             } label: { Label("Add set", systemImage: "plus.circle") }
                 .accessibilityIdentifier("addSet-\(exercise)")
+        } header: {
+            HStack {
+                Text(exercise)
+                Spacer()
+                VideoButton(name: exercise, link: session.videoURLs?[exercise])
+            }
         }
     }
 

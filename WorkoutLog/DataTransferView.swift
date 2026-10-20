@@ -24,7 +24,7 @@ struct DataTransferView: View {
                 Button("Export backup") { export() }.accessibilityIdentifier("exportBackup")
                 Button("Import backup") { importing = true }.accessibilityIdentifier("importBackup")
             } footer: {
-                Text("Backups include saved templates, history and the unfinished workout. Text in an unsaved editor is not included.")
+                Text("Backups include the exercise library, saved templates, history and the unfinished workout. Text in an unsaved editor is not included.")
             }
             .disabled(busy)
             Section {
