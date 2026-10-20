@@ -32,12 +32,11 @@ final class CalendarPlanTests: XCTestCase {
         try context.fetch(FetchDescriptor<CalendarRule>())
     }
 
-    /// The status of a day as the plain text of `DayStatus`, so expectations stay readable.
-    private func status(_ day: String, in context: ModelContext) throws -> String {
+    private func status(_ day: String, in context: ModelContext) throws -> DayStatus {
         Schedule.status(on: day,
                         rules: try rules(in: context),
                         sessions: try context.fetch(FetchDescriptor<WorkoutSession>()),
-                        walks: try context.fetch(FetchDescriptor<WalkingCompletion>())).rawValue
+                        walks: try context.fetch(FetchDescriptor<WalkingCompletion>()))
     }
 
     private func plannedTemplate(_ day: String, in context: ModelContext) throws -> UUID? {
