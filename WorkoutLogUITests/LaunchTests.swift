@@ -126,7 +126,7 @@ final class LaunchTests: XCTestCase {
         let url = try XCTUnwrap(URL(string: "workoutlog://session/22222222-2222-4222-8222-222222222222"))
         app.tabBars.buttons["History"].tap()
         XCTAssertTrue(app.buttons["history-Old Push"].waitForExistence(timeout: 10))
-        app.open(url)
+        openFromSafari(url, expecting: app)
         XCTAssertTrue(app.buttons["addSet-Bench"].waitForExistence(timeout: 10), app.debugDescription)
         let set = app.descendants(matching: .any).matching(identifier: "loggedSet").firstMatch
         XCTAssertTrue(set.label.contains("45 lb"))
@@ -138,7 +138,7 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(set.label.contains("exertion 7.5"))
         app.buttons["Close"].tap()
         app.terminate()
-        app.open(url)
+        openFromSafari(url, expecting: app)
         XCTAssertTrue(app.buttons["addSet-Bench"].waitForExistence(timeout: 10))
         app.buttons["Close"].tap()
         XCTAssertTrue(app.buttons["templateActions"].waitForExistence(timeout: 10))
@@ -156,7 +156,7 @@ final class LaunchTests: XCTestCase {
         app.buttons["Close"].tap()
         for text in ["workoutlog://session/33333333-3333-4333-8333-333333333333",
                      "workoutlog://session/not-a-uuid", "workoutlog://session/\(UUID())"] {
-            app.open(try XCTUnwrap(URL(string: text)))
+            openFromSafari(try XCTUnwrap(URL(string: text)), expecting: app)
             XCTAssertTrue(app.staticTexts["routeMessage"].waitForExistence(timeout: 10))
             XCTAssertFalse(app.buttons["addSet-Bench"].exists)
             XCTAssertTrue(app.buttons["resumeWorkout"].exists)

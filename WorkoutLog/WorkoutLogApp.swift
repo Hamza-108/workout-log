@@ -12,7 +12,11 @@ struct WorkoutLogApp: App {
             let schema = Schema([WorkoutTemplate.self, WorkoutSession.self])
             let configuration: ModelConfiguration
             #if DEBUG
+            // OS-initiated cold launches do not inherit XCTest's environment.
             if let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"], UUID(uuidString: testID) != nil {
+                UserDefaults.standard.set(testID, forKey: "WorkoutLogUITestStore")
+            }
+            if let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"] ?? UserDefaults.standard.string(forKey: "WorkoutLogUITestStore"), UUID(uuidString: testID) != nil {
                 configuration = ModelConfiguration(schema: schema, url: FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutLog-\(testID).store"), cloudKitDatabase: .none)
             } else {
                 configuration = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
