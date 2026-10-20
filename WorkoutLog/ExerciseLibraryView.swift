@@ -40,19 +40,7 @@ struct ExerciseLibraryView: View {
     @State private var error: String?
 
     var body: some View {
-        List {
-            if exercises.isEmpty { Text("Save exercises here, then select them when building a template.") }
-            ForEach(exercises.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }) { exercise in
-                HStack {
-                    Button(exercise.name) { editing = exercise }
-                        .accessibilityIdentifier("libraryExercise-\(exercise.name)")
-                    Spacer()
-                    VideoButton(name: exercise.name, link: exercise.videoURL)
-                }
-                .buttonStyle(.borderless)
-                .swipeActions { Button("Delete", role: .destructive) { deleting = exercise } }
-            }
-        }
+        exerciseList
         .searchable(text: $search, prompt: "Find an exercise")
         .navigationTitle("Exercise library")
         .toolbar {
@@ -73,6 +61,29 @@ struct ExerciseLibraryView: View {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
     }
+
+    private var exerciseList: some View {
+        List {
+            if exercises.isEmpty { Text("Save exercises here, then select them when building a template.") }
+            ForEach(filteredExercises) { exercise in exerciseRow(exercise) }
+        }
+    }
+
+    private var filteredExercises: [LibraryExercise] {
+        exercises.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
+    }
+
+    private func exerciseRow(_ exercise: LibraryExercise) -> some View {
+        HStack {
+            Button(exercise.name) { editing = exercise }
+                .accessibilityIdentifier("libraryExercise-\(exercise.name)")
+            Spacer()
+            VideoButton(name: exercise.name, link: exercise.videoURL)
+        }
+        .buttonStyle(.borderless)
+        .swipeActions { Button("Delete", role: .destructive) { deleting = exercise } }
+    }
+
 }
 
 struct LibraryExerciseEditor: View {
