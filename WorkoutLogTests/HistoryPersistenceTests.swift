@@ -20,6 +20,11 @@ final class HistoryPersistenceTests: XCTestCase {
                 try completed.record(LoggedSet(exercise: "Bench", weight: 20, reps: 8, rpe: 7))
                 try completed.finish()
             }
+            let other = try WorkoutSession.start(template: template, unit: .kg, in: context)
+            try context.commit {
+                try other.record(LoggedSet(exercise: "Bench", weight: 25, reps: 5, rpe: 8))
+                try other.finish()
+            }
             let draft = try WorkoutSession.start(template: template, unit: .lb, in: context)
             try context.commit { try draft.record(LoggedSet(exercise: "Bench", weight: 45, reps: 5, rpe: 6)) }
             expectedDraft = draft.id
@@ -28,8 +33,9 @@ final class HistoryPersistenceTests: XCTestCase {
         let reopened = try ModelContainer(for: schema, configurations: [config])
         let context = ModelContext(reopened)
         let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
-        XCTAssertEqual(sessions.count, 1)
-        let draft = try XCTUnwrap(sessions.first)
+        XCTAssertEqual(sessions.count, 2)
+        XCTAssertEqual(sessions.first(where: { $0.finishedAt != nil })?.sets.first?.weight, 25)
+        let draft = try XCTUnwrap(sessions.first(where: { $0.finishedAt == nil }))
         XCTAssertEqual(draft.id, expectedDraft)
         XCTAssertNil(draft.finishedAt)
         XCTAssertEqual(draft.unit, "lb")
