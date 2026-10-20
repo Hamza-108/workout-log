@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 private struct SetSelection: Identifiable {
-    let id = UUID()
+    var id = UUID()
     let exercise: String
     var existing: LoggedSet?
 }
@@ -13,7 +13,7 @@ struct SessionView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var session: WorkoutSession
     @State private var selection: SetSelection?
-    @State private var deleting: LoggedSet?
+    @State private var deleting: PlannedSet?
     @State private var discarding = false
     @State private var finishing = false
     @State private var error: String?
@@ -28,24 +28,7 @@ struct SessionView: View {
                 Text("Logged sets save immediately. You can close and resume this workout later.")
             }
             ForEach(session.exercises, id: \.self) { exercise in
-                Section(exercise) {
-                    ForEach(session.sets.filter { $0.exercise == exercise }) { set in
-                        Button {
-                            selection = SetSelection(exercise: exercise, existing: set)
-                        } label: {
-                            SetRow(set: set, unit: session.unit)
-                                .foregroundStyle(.primary)
-                        }
-                        .accessibilityHint("Edit this set")
-                        .swipeActions {
-                            Button("Delete", role: .destructive) { deleting = set }
-                        }
-                    }
-                    Button {
-                        selection = SetSelection(exercise: exercise)
-                    } label: { Label("Add set", systemImage: "plus.circle") }
-                        .accessibilityIdentifier("addSet-\(exercise)")
-                }
+                exerciseSection(exercise)
             }
             Section {
                 Button("Discard workout", role: .destructive) { discarding = true }
@@ -63,12 +46,12 @@ struct SessionView: View {
             }
         }
         .sheet(item: $selection) { selection in
-            NavigationStack { SetEditor(session: session, exercise: selection.exercise, existing: selection.existing) }
+            NavigationStack { SetEditor(session: session, exercise: selection.exercise, existing: selection.existing, setID: selection.id) }
         }
         .confirmationDialog("Delete this set?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             Button("Delete set", role: .destructive) {
                 guard let set = deleting else { return }
-                do { try context.commit { session.sets.removeAll { $0.id == set.id } } }
+                do { try context.commit { try session.removeSet(set.id) } }
                 catch { self.error = error.localizedDescription }
                 deleting = nil
             }
@@ -90,6 +73,40 @@ struct SessionView: View {
         .alert("Could not save", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
+    }
+
+    private func exerciseSection(_ exercise: String) -> some View {
+        Section(exercise) {
+            ForEach(Array(session.rows(for: exercise).enumerated()), id: \.element.id) { index, row in
+                setButton(row, number: index + 1)
+            }
+            Button {
+                selection = SetSelection(exercise: exercise)
+            } label: { Label("Add set", systemImage: "plus.circle") }
+                .accessibilityIdentifier("addSet-\(exercise)")
+        }
+    }
+
+    private func setButton(_ row: PlannedSet, number: Int) -> some View {
+        let logged = session.sets.first { $0.id == row.id }
+        return Button {
+            selection = SetSelection(id: row.id, exercise: row.exercise, existing: logged)
+        } label: {
+            if let logged {
+                SetRow(set: logged, unit: session.unit).foregroundStyle(.primary)
+            } else {
+                HStack {
+                    Text("Set \(number)")
+                    Spacer()
+                    Text("Not logged").foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityHint(logged == nil ? "Log this planned set" : "Edit this set")
+        .accessibilityIdentifier(logged == nil ? "plannedSet-\(row.exercise)-\(number)" : "loggedSet")
+        .swipeActions {
+            Button("Delete", role: .destructive) { deleting = row }
+        }
     }
 
     private func finish() {
@@ -124,15 +141,17 @@ private struct SetEditor: View {
     let session: WorkoutSession
     let exercise: String
     let existing: LoggedSet?
+    let setID: UUID
     @State private var weight: String
     @State private var reps: String
     @State private var rpe: Double
     @State private var error: String?
 
-    init(session: WorkoutSession, exercise: String, existing: LoggedSet?) {
+    init(session: WorkoutSession, exercise: String, existing: LoggedSet?, setID: UUID) {
         self.session = session
         self.exercise = exercise
         self.existing = existing
+        self.setID = setID
         _weight = State(initialValue: existing.map { WeightInput.format($0.weight) } ?? "")
         _reps = State(initialValue: existing.map { String($0.reps) } ?? "")
         _rpe = State(initialValue: existing?.rpe ?? 7)
@@ -173,7 +192,7 @@ private struct SetEditor: View {
             guard let parsedReps = Int(reps.trimmingCharacters(in: .whitespacesAndNewlines)), parsedReps > 0 else {
                 throw LogError(message: "Reps must be a positive whole number.")
             }
-            let set = LoggedSet(id: existing?.id ?? UUID(), exercise: exercise, weight: parsedWeight, reps: parsedReps, rpe: rpe)
+            let set = LoggedSet(id: existing?.id ?? setID, exercise: exercise, weight: parsedWeight, reps: parsedReps, rpe: rpe)
             try context.commit { try session.record(set) }
             dismiss()
         } catch { self.error = error.localizedDescription }

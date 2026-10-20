@@ -1,16 +1,44 @@
 import Foundation
 import SwiftData
 
-struct TemplateDraft: Codable, Identifiable {
+struct TemplateDraft {
     var name: String
     var exercises: [String]
-    var id: String { name + exercises.joined(separator: "\n") }
+    var setCounts: [Int]
+
+    static let example = #"{"name":"Push day","exercises":[{"name":"Bench press","sets":3},{"name":"Overhead press","sets":2}]}"#
+
+    private struct Input: Decodable {
+        let name: String
+        let exercises: [Exercise]
+    }
+
+    private struct Exercise: Decodable {
+        let name: String
+        let sets: Int
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.singleValueContainer()
+            if let name = try? container.decode(String.self) {
+                self.name = name
+                sets = 3
+            } else {
+                let value = try container.decode(Fields.self)
+                name = value.name
+                sets = value.sets
+            }
+        }
+
+        private struct Fields: Decodable { let name: String; let sets: Int }
+    }
 
     static func decode(_ data: Data) throws -> TemplateDraft {
         try DataTransfer.checkSize(data.count)
-        let draft = try JSONDecoder().decode(Self.self, from: data)
-        let (name, exercises) = try WorkoutTemplate.validated(name: draft.name, exercises: draft.exercises)
-        return Self(name: name, exercises: exercises)
+        let draft = try JSONDecoder().decode(Input.self, from: data)
+        let (name, exercises) = try WorkoutTemplate.validated(name: draft.name, exercises: draft.exercises.map(\.name))
+        let counts = draft.exercises.map(\.sets)
+        try WorkoutTemplate.validateSetCounts(counts, exercises: exercises)
+        return Self(name: name, exercises: exercises, setCounts: counts)
     }
 }
 
@@ -21,11 +49,13 @@ enum DataTransfer {
         var id: UUID
         var name: String
         var exercises: [String]
+        var setCounts: [Int]? = nil
 
         init(_ model: WorkoutTemplate) {
             id = model.id
             name = model.name
             exercises = model.exercises
+            setCounts = model.setCounts
         }
     }
 
@@ -37,6 +67,7 @@ enum DataTransfer {
         var exercises: [String]
         var unit: WeightUnit
         var sets: [LoggedSet]
+        var plannedSets: [PlannedSet]? = nil
 
         init(_ model: WorkoutSession) throws {
             guard let unit = WeightUnit(rawValue: model.unit) else { throw LogError(message: "Unknown workout weight unit.") }
@@ -47,23 +78,30 @@ enum DataTransfer {
             exercises = model.exercises
             self.unit = unit
             sets = model.sets
+            plannedSets = model.plannedSets
         }
     }
 
     struct Backup: Codable, Equatable {
-        var schemaVersion = 1
+        var schemaVersion = 2
         var preferredWeightUnit: WeightUnit
         var templates: [Template]
         var sessions: [Session]
 
         func validate() throws {
-            guard schemaVersion == 1 else { throw LogError(message: "Unsupported backup version: \(schemaVersion).") }
+            guard (1...2).contains(schemaVersion) else { throw LogError(message: "Unsupported backup version: \(schemaVersion).") }
+            if schemaVersion == 1 {
+                guard templates.allSatisfy({ $0.setCounts == nil }), sessions.allSatisfy({ $0.plannedSets == nil }) else {
+                    throw LogError(message: "Planned sets require backup version 2.")
+                }
+            }
             guard Set(templates.map(\.id)).count == templates.count,
                   Set(sessions.map(\.id)).count == sessions.count else {
                 throw LogError(message: "The backup contains duplicate template or workout IDs.")
             }
             for template in templates {
                 try DataTransfer.validateNames(template.name, exercises: template.exercises)
+                try WorkoutTemplate.validateSetCounts(template.setCounts, exercises: template.exercises)
             }
             for session in sessions {
                 try DataTransfer.validateNames(session.templateName, exercises: session.exercises)
@@ -75,7 +113,16 @@ enum DataTransfer {
                 guard Set(session.sets.map(\.id)).count == session.sets.count else {
                     throw LogError(message: "A workout contains duplicate set IDs.")
                 }
+                let planned = session.plannedSets ?? []
+                guard Set(planned.map(\.id)).count == planned.count,
+                      planned.allSatisfy({ session.exercises.contains($0.exercise) }) else {
+                    throw LogError(message: "Planned sets must have unique IDs and belong to a workout exercise.")
+                }
+                let plannedExercises = Dictionary(uniqueKeysWithValues: planned.map { ($0.id, $0.exercise) })
                 for set in session.sets {
+                    if let exercise = plannedExercises[set.id], exercise != set.exercise {
+                        throw LogError(message: "A logged set does not match its planned exercise.")
+                    }
                     try set.validate()
                     guard session.exercises.contains(set.exercise) else {
                         throw LogError(message: "A set refers to an exercise missing from its workout.")
@@ -214,10 +261,11 @@ enum DataTransfer {
             session.startedAt = try date(record.startedAt)
             session.finishedAt = try record.finishedAt.map(date)
             session.sets = record.sets
+            session.plannedSets = record.plannedSets
             return session
         }
         let templates = preview.templates.map { record in
-            let template = WorkoutTemplate(name: record.name, exercises: record.exercises)
+            let template = WorkoutTemplate(name: record.name, exercises: record.exercises, setCounts: record.setCounts)
             template.id = record.id
             return template
         }

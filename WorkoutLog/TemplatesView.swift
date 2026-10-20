@@ -12,9 +12,7 @@ struct TemplatesView: View {
     @AppStorage("weightUnit") private var unit = WeightUnit.kg.rawValue
     @State private var creating = false
     @State private var importing = false
-    @State private var readingTemplate = false
     @State private var isVisible = false
-    @State private var importedDraft: TemplateDraft?
     #if DEBUG
     @State private var testDraftLoaded = false
     #endif
@@ -25,7 +23,6 @@ struct TemplatesView: View {
 
     var body: some View {
         List {
-            if readingTemplate { ProgressView("Reading template…") }
             if let routeMessage { Section { Text(routeMessage).accessibilityIdentifier("routeMessage") } }
             if let notice = activities.notice { Section { Text(notice).foregroundStyle(.secondary) } }
             if let draft = drafts.first {
@@ -57,7 +54,9 @@ struct TemplatesView: View {
                 ForEach(templates) { template in
                     VStack(alignment: .leading, spacing: 8) {
                         Text(template.name).font(.headline)
-                        Text(template.exercises.joined(separator: " · "))
+                        Text(template.exercises.enumerated().map { index, name in
+                            template.setCounts.map { "\(name) × \($0[index])" } ?? name
+                        }.joined(separator: " · "))
                             .font(.subheadline).foregroundStyle(.secondary)
                         HStack {
                             Button("Start workout") { start(template) }
@@ -81,10 +80,9 @@ struct TemplatesView: View {
             #if DEBUG
             if !testDraftLoaded,
                let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"], UUID(uuidString: testID) != nil,
-               let fixture = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_TEMPLATE"] {
+               ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_TEMPLATE"] != nil {
                 testDraftLoaded = true
-                do { importedDraft = try TemplateDraft.decode(Data(fixture.utf8)) }
-                catch { self.error = error.localizedDescription }
+                importing = true
             }
             #endif
         }
@@ -93,27 +91,13 @@ struct TemplatesView: View {
                 .accessibilityIdentifier("newTemplate")
             Menu {
                 Button("Import template", systemImage: "square.and.arrow.down") { importing = true }
-                    .disabled(readingTemplate)
                 NavigationLink("Data and backups", value: HomeDestination.data)
             } label: { Label("More", systemImage: "ellipsis.circle") }
                 .accessibilityIdentifier("templateActions")
         }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
-            switch result {
-            case .success(let url):
-                readingTemplate = true
-                Task {
-                    defer { readingTemplate = false }
-                    do {
-                        importedDraft = try await Task.detached(priority: .userInitiated) {
-                            try TemplateDraft.decode(DataTransfer.read(url))
-                        }.value
-                    } catch { self.error = error.localizedDescription }
-                }
-            case .failure(let error): self.error = DataTransfer.fileErrorMessage(error)
-            }
+        .sheet(isPresented: $importing, onDismiss: openRequestedSession) {
+            NavigationStack { TemplateImportView() }
         }
-        .sheet(item: $importedDraft, onDismiss: openRequestedSession) { draft in NavigationStack { TemplateEditor(draft: draft) } }
         .sheet(isPresented: $creating, onDismiss: openRequestedSession) { NavigationStack { TemplateEditor() } }
         .sheet(item: $editing, onDismiss: openRequestedSession) { template in NavigationStack { TemplateEditor(template: template) } }
         .fullScreenCover(item: $activeSession) { session in NavigationStack { SessionView(session: session) } }
@@ -122,10 +106,10 @@ struct TemplatesView: View {
         .onChange(of: resumeID, initial: true) { _, id in
             guard let id else { return }
             if activeSession?.id == id { resumeID = nil; return }
-            if creating || editing != nil || importedDraft != nil {
+            if creating || editing != nil || importing {
                 creating = false
                 editing = nil
-                importedDraft = nil
+                importing = false
             } else { openRequestedSession() }
         }
         .confirmationDialog("Delete template?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
@@ -173,6 +157,7 @@ struct TemplatesView: View {
 private struct ExerciseDraft: Identifiable {
     let id = UUID()
     var name: String
+    var sets = 3
 }
 
 struct TemplateEditor: View {
@@ -186,7 +171,11 @@ struct TemplateEditor: View {
     init(template: WorkoutTemplate? = nil, draft: TemplateDraft? = nil) {
         self.template = template
         _name = State(initialValue: template?.name ?? draft?.name ?? "")
-        _exercises = State(initialValue: (template?.exercises ?? draft?.exercises ?? [""]).map { ExerciseDraft(name: $0) })
+        let names = template?.exercises ?? draft?.exercises ?? [""]
+        let counts = template?.setCounts ?? draft?.setCounts
+        _exercises = State(initialValue: names.enumerated().map { index, name in
+            ExerciseDraft(name: name, sets: counts?[index] ?? 3)
+        })
     }
 
     var body: some View {
@@ -197,8 +186,12 @@ struct TemplateEditor: View {
             }
             Section {
                 ForEach($exercises) { $exercise in
-                    TextField("Exercise name", text: $exercise.name)
-                        .accessibilityIdentifier("exerciseName")
+                    VStack(alignment: .leading) {
+                        TextField("Exercise name", text: $exercise.name)
+                            .accessibilityIdentifier("exerciseName")
+                        Stepper("Sets: \(exercise.sets)", value: $exercise.sets, in: 1...99)
+                            .accessibilityIdentifier("exerciseSets")
+                    }
                 }
                 .onDelete { exercises.remove(atOffsets: $0) }
                 .onMove { exercises.move(fromOffsets: $0, toOffset: $1) }
@@ -225,12 +218,15 @@ struct TemplateEditor: View {
     private func save() {
         do {
             let (name, exercises) = try WorkoutTemplate.validated(name: name, exercises: exercises.map(\.name))
+            let counts = self.exercises.map(\.sets)
+            try WorkoutTemplate.validateSetCounts(counts, exercises: exercises)
             try context.commit {
                 if let template {
                     template.name = name
                     template.exercises = exercises
+                    template.setCounts = counts
                 } else {
-                    context.insert(WorkoutTemplate(name: name, exercises: exercises))
+                    context.insert(WorkoutTemplate(name: name, exercises: exercises, setCounts: counts))
                 }
             }
             dismiss()

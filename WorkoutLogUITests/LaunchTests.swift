@@ -167,7 +167,7 @@ final class LaunchTests: XCTestCase {
     func testImportedTemplateEditorCancelAndSave() {
         let fixture = #"{"name":"Imported Push","exercises":["Bench","Press"]}"#
         let app = launchApp(template: fixture)
-        XCTAssertTrue(app.textFields["templateName"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields["templateName"].waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertEqual(app.textFields["templateName"].value as? String, "Imported Push")
         let exercises = app.textFields.matching(identifier: "exerciseName")
         XCTAssertEqual(exercises.element(boundBy: 0).value as? String, "Bench")
@@ -233,6 +233,59 @@ final class LaunchTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["startWorkout-Push day"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["resumeWorkout"].exists)
+    }
+
+    func testPresetRowsCanBeLoggedRemovedAddedAndResumed() {
+        let app = launchApp()
+        createTemplate(in: app)
+        app.buttons["startWorkout-Push day"].tap()
+        XCTAssertTrue(app.buttons["plannedSet-Bench-3"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["finishWorkout"].isEnabled)
+        app.buttons["plannedSet-Bench-3"].tap()
+        enter("20", in: app.textFields["setWeight"])
+        enter("8", in: app.textFields["setReps"])
+        app.buttons["saveSet"].tap()
+        let logged = app.descendants(matching: .any).matching(identifier: "loggedSet").firstMatch
+        XCTAssertTrue(logged.waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["plannedSet-Bench-3"].exists)
+        let pending = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "plannedSet-Bench-"))
+        XCTAssertEqual(pending.count, 2)
+        app.buttons["plannedSet-Bench-1"].swipeLeft()
+        app.buttons["Delete"].tap()
+        app.buttons["Delete set"].tap()
+        XCTAssertEqual(pending.count, 1)
+        app.buttons["addSet-Bench"].tap()
+        enter("0", in: app.textFields["setWeight"])
+        enter("10", in: app.textFields["setReps"])
+        app.buttons["saveSet"].tap()
+        XCTAssertTrue(app.buttons["Close"].waitForExistence(timeout: 10))
+        app.buttons["Close"].tap()
+        app.buttons["Edit Push day"].tap()
+        XCTAssertTrue(app.steppers["exerciseSets"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.steppers["exerciseSets"].label.contains("3"))
+        app.buttons["Cancel"].tap()
+        app.terminate()
+        app.launch()
+        app.buttons["resumeWorkout"].tap()
+        XCTAssertTrue(logged.waitForExistence(timeout: 10))
+        XCTAssertEqual(pending.count, 1)
+        XCTAssertTrue(app.staticTexts["2 sets saved · kg"].exists)
+    }
+
+    func testImportFormatAndCopyExampleAreVisibleInApp() {
+        let app = launchApp()
+        app.buttons["templateActions"].tap()
+        app.buttons["Import template"].tap()
+        let example = app.staticTexts["templateJSONExample"]
+        XCTAssertTrue(example.waitForExistence(timeout: 10))
+        XCTAssertTrue(example.label.contains("\"sets\":3"))
+        XCTAssertTrue(app.buttons["chooseTemplateJSON"].exists)
+        app.buttons["copyTemplateExample"].tap()
+        app.swipeUp()
+        XCTAssertTrue(app.staticTexts["Example copied."].waitForExistence(timeout: 10))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["newTemplate"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["startWorkout-Push day"].exists)
     }
 
     func testDataScreenIsAccessible() {

@@ -197,4 +197,56 @@ final class DataTransferTests: XCTestCase {
         XCTAssertThrowsError(try DataTransfer.read(url))
         XCTAssertThrowsError(try DataTransfer.read(url.appendingPathExtension("missing")))
     }
+    func testTemplateJSONPresetsAndLegacyFormat() throws {
+        let draft = try TemplateDraft.decode(Data(TemplateDraft.example.utf8))
+        XCTAssertEqual(draft.exercises, ["Bench press", "Overhead press"])
+        XCTAssertEqual(draft.setCounts, [3, 2])
+        let legacy = try TemplateDraft.decode(Data(#"{"name":"Old","exercises":["Bench","Press"]}"#.utf8))
+        XCTAssertEqual(legacy.setCounts, [3, 3])
+        for exercise in [#"{"name":"Bench","sets":0}"#, #"{"name":"Bench","sets":100}"#,
+                         #"{"name":"Bench","sets":2.5}"#, #"{"name":"Bench","sets":"3"}"#,
+                         #"{"name":"Bench"}"#] {
+            XCTAssertThrowsError(try TemplateDraft.decode(Data("{\"name\":\"Bad\",\"exercises\":[\(exercise)]}".utf8)))
+        }
+    }
+
+    func testPresetBackupsRoundTripAndConflicts() throws {
+        let source = try store()
+        let template = WorkoutTemplate(name: "Push", exercises: ["Bench"], setCounts: [3])
+        try source.mainContext.commit { source.mainContext.insert(template) }
+        let session = try WorkoutSession.start(template: template, unit: .kg, in: source.mainContext)
+        let slot = try XCTUnwrap(session.plannedSets?.last)
+        try source.mainContext.commit {
+            try session.record(LoggedSet(id: slot.id, exercise: "Bench", weight: 20, reps: 8, rpe: 7.5))
+        }
+        let backup = try DataTransfer.snapshot(in: source.mainContext, unit: .lb)
+        XCTAssertEqual(backup.schemaVersion, 2)
+        let decoded = try DataTransfer.decode(DataTransfer.encode(backup))
+        XCTAssertEqual(decoded, backup)
+        let target = try store()
+        try DataTransfer.apply(decoded, in: target.mainContext)
+        XCTAssertEqual(try DataTransfer.snapshot(in: target.mainContext, unit: .lb), backup)
+        XCTAssertEqual(try DataTransfer.preview(decoded, in: target.mainContext).skippedSessions, 1)
+        var conflict = decoded
+        conflict.templates[0].setCounts = [2]
+        XCTAssertThrowsError(try DataTransfer.apply(conflict, in: target.mainContext))
+        XCTAssertEqual(try DataTransfer.snapshot(in: target.mainContext, unit: .lb), backup)
+        var invalid = decoded
+        invalid.sessions[0].plannedSets?.append(slot)
+        XCTAssertThrowsError(try DataTransfer.apply(invalid, in: target.mainContext))
+        invalid = decoded
+        invalid.sessions[0].plannedSets?[0].exercise = "Missing"
+        XCTAssertThrowsError(try DataTransfer.apply(invalid, in: target.mainContext))
+    }
+
+    func testVersionOneBackupImportsWithoutInventingPresets() throws {
+        let data = Data(#"{"schemaVersion":1,"preferredWeightUnit":"kg","templates":[{"id":"11111111-1111-4111-8111-111111111111","name":"Old","exercises":["Bench"]}],"sessions":[]}"#.utf8)
+        let backup = try DataTransfer.decode(data)
+        let db = try store()
+        try DataTransfer.apply(backup, in: db.mainContext)
+        let template = try XCTUnwrap(db.mainContext.fetch(FetchDescriptor<WorkoutTemplate>()).first)
+        XCTAssertNil(template.setCounts)
+        let session = try WorkoutSession.start(template: template, unit: .kg, in: db.mainContext)
+        XCTAssertNil(session.plannedSets)
+    }
 }
