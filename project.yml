@@ -28,8 +28,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Workout Log
         INFOPLIST_FILE: WorkoutLog/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        MARKETING_VERSION: "0.6.0"
-        CURRENT_PROJECT_VERSION: "7"
+        MARKETING_VERSION: "0.7.0"
+        CURRENT_PROJECT_VERSION: "8"
   WorkoutLogActivity:
     type: app-extension
     platform: iOS
@@ -43,8 +43,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_FILE: WorkoutLogActivity/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: Workout Log Status
-        MARKETING_VERSION: "0.6.0"
-        CURRENT_PROJECT_VERSION: "7"
+        MARKETING_VERSION: "0.7.0"
+        CURRENT_PROJECT_VERSION: "8"
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
   WorkoutLogTests:

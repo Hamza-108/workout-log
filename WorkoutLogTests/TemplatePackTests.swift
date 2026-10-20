@@ -174,9 +174,12 @@ final class TemplatePackTests: XCTestCase {
           {"name":"Tuesday","exercises":[{"name":"Bench","sets":3,"videoURL":"https://youtu.be/\(otherVideoID)"}]}
         ]}
         """
-        XCTAssertThrowsError(try TemplatePack.decode(Data(conflict.utf8))) { error in
-            XCTAssertTrue(packMessage(error).contains("Conflicting video links"), packMessage(error))
-        }
+        let drafts = try TemplatePack.decode(Data(conflict.utf8))
+        let database = try store()
+        let review = try TemplatePack.review(drafts, in: database.mainContext)
+        XCTAssertEqual(review.conflicts.count, 1)
+        XCTAssertThrowsError(try TemplatePack.apply(drafts, in: database.mainContext))
+        XCTAssertEqual(try database.mainContext.fetchCount(FetchDescriptor<WorkoutTemplate>()), 0)
     }
 
     func testConflictingLibraryEntryRejectsImportAndTheStateIsRechecked() throws {
@@ -306,8 +309,12 @@ final class TemplatePackTests: XCTestCase {
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: exported) as? [String: Any])
         let templates = try XCTUnwrap(object["templates"] as? [[String: Any]])
         XCTAssertEqual(templates.count, 2)
-        // Export must not discard variants; importing requires resolving explicit definition conflicts.
-        XCTAssertThrowsError(try TemplatePack.decode(exported))
+        // Export keeps both snapshots; review, rather than decoding, resolves their differences.
+        let imported = try TemplatePack.decode(exported)
+        let database = try store()
+        let review = try TemplatePack.review(imported, in: database.mainContext)
+        XCTAssertEqual(review.conflicts.count, 1)
+        XCTAssertThrowsError(try TemplatePack.apply(review, choices: [:], in: database.mainContext))
     }
 
     func testBackupReusesIdenticalLibraryDefinitionsWithDifferentIDs() throws {

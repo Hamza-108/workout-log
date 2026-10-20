@@ -37,7 +37,7 @@ Full backups include calendar rules and walking completions. Template-only JSON 
 
 Templates → **More (…) → Exercise library** manages reusable exercises with a name and optional YouTube video link. In a template, **Add exercises** opens a searchable multi-select picker; **Create new exercise** works without leaving it. Selected exercises include their videos, start with 3 sets and can be reordered or given different counts per template.
 
-Templates and workouts keep independent copies. Renaming/deleting a library entry does not change saved templates or workouts; changing a template does not alter an already-started workout. Existing template exercise names populate the library once on upgrade. Deleting a library entry does not make it reappear on the next launch.
+Templates and workouts keep independent copies. Renaming/deleting a library entry does not change saved templates or workouts; changing a template does not alter an already-started workout. Existing template exercise names populate the library once on upgrade. Deleting a library entry does not make it reappear on the next launch. **Exercise library → More (…) → Clear library** removes all library entries after a count/backup warning and confirmation. Templates, saved workouts, the current session and calendar are unchanged. Clearing cannot be undone without a backup; the library stays empty after restart.
 
 An optional **Add video** field accepts HTTPS YouTube watch, short, Shorts or embed links. Links are normalized to a standard video address, preserving start timestamps while dropping tracking and playlist parameters. A small accessible play icon appears beside a linked exercise while logging. Tapping opens YouTube or the browser; the app does not fetch thumbnails, embed, autoplay or download video. Watching needs internet; logging remains offline. Start times such as `?t=90`, `?t=90s`, `?t=1m30s`, `?start=90` and `#t=1m30s` are stored as `&t=90`. Invalid or conflicting times are rejected instead of silently discarded.
 
@@ -45,7 +45,7 @@ An optional **Add video** field accepts HTTPS YouTube watch, short, Shorts or em
 
 ## Import / export templates or a whole plan
 
-Templates → **More (…) → Import template** accepts a JSON file **or typed/pasted plain text**. The screen shows both formats, field explanations and copyable examples. Single-template imports open the existing editor; whole-plan imports show all days before **Import all**. Cancel changes nothing. All templates and new library exercises are validated first and saved together.
+Templates → **More (…) → Import template** accepts a JSON file **or typed/pasted plain text**. The screen shows both formats, field explanations and copyable examples. Single-template imports open the existing editor; whole-plan imports show all days before **Import all**. If an exercise has a different video from the library or another template in the file, a comparison shows both full links (including timestamps) or **No video**, and the affected templates. Invalid input/save errors show an alert and visible status; pasted input is preserved. Cancel changes nothing. All template additions and library changes save together.
 
 ```json
 {
@@ -76,11 +76,17 @@ Whole-plan format (replace the placeholder video ID with yours, or omit `videoUR
 }
 ```
 
-`name` is the template name; `exercises` is ordered. Each exercise needs a non-empty `name`, an integer `sets` from 1 to 99 and optionally `videoURL`. The old `"exercises":["Bench press","Overhead press"]` format still works with 3 sets each. Both text and files have a 25 MiB UTF-8 limit. Empty names, duplicate exercises within a template, invalid links and conflicting video definitions for the same library exercise are rejected before saving.
+`name` is the template name; `exercises` is ordered. Each exercise needs a non-empty `name`, an integer `sets` from 1 to 99 and optionally `videoURL`. The old `"exercises":["Bench press","Overhead press"]` format still works with 3 sets each. Both text and files have a 25 MiB UTF-8 limit. Empty names, duplicate exercises within a template and invalid links are rejected before saving. Different valid video definitions are reviewed, not treated as malformed JSON.
 
-Imports create new templates; they never overwrite existing ones. The batch preview warns about repeated template names: importing again can create copies. Matching exercise-library definitions are reused; omitting a video keeps that template unlinked without clearing the library video. Conflicting explicit links require editing the JSON or library entry before retrying. Monday/Tuesday are names, not scheduled calendar events.
+Imports create new templates; they never overwrite existing ones. The batch preview warns about repeated template names: importing again can create copies. Matching exercise-library definitions are reused; omitting a video keeps that template unlinked without clearing the library video. For each different video definition, choose:
 
-**More (…) → Export templates** selects some/all templates, then **Save JSON file** or **Copy JSON**. Exports contain names, exercise order, counts and videos—not history, database IDs or app-identifying metadata. Legacy name-only templates export with 3 sets per exercise. Exports preserve template-specific video variants; if explicit links for one exercise disagree, resolve them before importing that pack. For an exact data-preserving copy including legacy metadata, use a full backup instead.
+- **Reject incoming change:** use the saved definition in the new templates; keep the library unchanged.
+- **Override:** use the incoming definition and update that library entry for future selections. Existing templates and workouts retain their snapshots.
+- **Keep both:** keep the original and add the incoming definition as, for example, `Back Squat (variation 1)`. A unique name is chosen without case-insensitive collisions; affected imported templates use it. Actual names appear in the preview before saving.
+
+Every conflict needs an explicit choice. Only one variant can override a given entry; choosing another Override makes the earlier choice unresolved again. Omitting a video remains an omission, not a request to erase a saved link. If the library changes after comparison, Import refuses the stale review: use **Refresh comparisons** and choose again. **Cancel import** rejects the entire import without writes. Monday/Tuesday are names, not scheduled calendar events.
+
+**More (…) → Export templates** selects some/all templates, then **Save JSON file** or **Copy JSON**. Exports contain names, exercise order, counts and videos—not history, database IDs or app-identifying metadata. Legacy name-only templates export with 3 sets per exercise. Exports preserve template-specific video variants; disagreeing definitions appear in the import comparison. For an exact data-preserving copy including legacy metadata, use a full backup instead.
 
 ## Backups
 

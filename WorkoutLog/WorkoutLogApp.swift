@@ -5,6 +5,7 @@ import SwiftUI
 struct WorkoutLogApp: App {
     @State private var storage: Result<(container: ModelContainer, context: ModelContext), Error>
     @State private var saveError: String?
+    @State private var importState = TemplateImportState()
     @State private var activities = WorkoutActivityController()
 
     init() {
@@ -49,6 +50,9 @@ struct WorkoutLogApp: App {
                         Label("Change not saved", systemImage: "exclamationmark.triangle")
                     } description: {
                         Text("\(saveError)\n\nYour previously saved data has been reloaded. The failed change was not kept.")
+                        if importState.hasPending {
+                            Text("Your import draft is kept. Return to templates and reopen Import template to retry with your text and choices.")
+                        }
                     } actions: {
                         Button("Return to templates") { self.saveError = nil }
                     }
@@ -69,6 +73,7 @@ struct WorkoutLogApp: App {
                 }
             }
             .environment(activities)
+            .environment(importState)
             .onReceive(NotificationCenter.default.publisher(for: .workoutSaveFailed)) { notification in
                 guard case .success(let data) = storage,
                       let failed = notification.object as? ModelContext, failed === data.context else { return }
