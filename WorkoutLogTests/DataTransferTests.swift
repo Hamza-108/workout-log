@@ -148,6 +148,38 @@ final class DataTransferTests: XCTestCase {
         }
     }
 
+    func testFailedImportSaveLeavesSavedStoreUnchanged() throws {
+        let source = try store()
+        let backup = try populated(source.mainContext)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutLog-readonly-\(UUID()).store")
+        do {
+            let target = try store(url: url)
+            try target.mainContext.commit { target.mainContext.insert(WorkoutTemplate(name: "Kept", exercises: ["Row"])) }
+        }
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self])
+        let config = ModelConfiguration(schema: schema, url: url, allowsSave: false, cloudKitDatabase: .none)
+        do {
+            let target = try ModelContainer(for: schema, configurations: [config])
+            let context = ModelContext(target)
+            context.autosaveEnabled = false
+            let failure = expectation(forNotification: .workoutSaveFailed, object: context)
+            XCTAssertThrowsError(try DataTransfer.apply(backup, in: context))
+            wait(for: [failure], timeout: 1)
+            XCTAssertFalse(context.hasChanges)
+            let fresh = ModelContext(target)
+            XCTAssertEqual(try fresh.fetchCount(FetchDescriptor<WorkoutSession>()), 0)
+            XCTAssertEqual(try fresh.fetch(FetchDescriptor<WorkoutTemplate>()).map(\.name), ["Kept"])
+        }
+        let reopened = try store(url: url)
+        XCTAssertEqual(try reopened.mainContext.fetchCount(FetchDescriptor<WorkoutSession>()), 0)
+        XCTAssertEqual(try reopened.mainContext.fetch(FetchDescriptor<WorkoutTemplate>()).map(\.name), ["Kept"])
+    }
+
+    func testCanceledPickersAreNotErrors() {
+        XCTAssertNil(DataTransfer.fileErrorMessage(NSError(domain: NSCocoaErrorDomain, code: NSUserCancelledError)))
+        XCTAssertNotNil(DataTransfer.fileErrorMessage(LogError(message: "Read failed")))
+    }
+
     func testMalformedOversizedFilesAndStrictUnits() throws {
         XCTAssertThrowsError(try DataTransfer.decode(Data("garbage".utf8)))
         let source = try store()

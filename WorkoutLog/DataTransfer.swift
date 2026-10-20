@@ -100,6 +100,12 @@ enum DataTransfer {
         }
     }
 
+    static func fileErrorMessage(_ error: Error) -> String? {
+        let error = error as NSError
+        if error.domain == NSCocoaErrorDomain, error.code == NSUserCancelledError { return nil }
+        return error.localizedDescription
+    }
+
     static func checkSize(_ count: Int) throws {
         guard count <= maximumBytes else { throw LogError(message: "JSON files must be 25 MiB or smaller.") }
     }

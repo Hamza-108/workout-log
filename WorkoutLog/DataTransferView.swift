@@ -38,7 +38,7 @@ struct DataTransferView: View {
                       defaultFilename: "WorkoutLog-backup-\(Date().formatted(.iso8601.year().month().day()))") { result in
             switch result {
             case .success: message = "Backup exported. Keep it somewhere safe."
-            case .failure(let error): message = error.localizedDescription
+            case .failure(let error): message = DataTransfer.fileErrorMessage(error)
             }
         }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
@@ -55,7 +55,7 @@ struct DataTransferView: View {
                         selection = BackupSelection(backup: backup, preview: preview)
                     } catch { message = error.localizedDescription }
                 }
-            case .failure(let error): message = error.localizedDescription
+            case .failure(let error): message = DataTransfer.fileErrorMessage(error)
             }
         }
         .sheet(item: $selection) { selection in
