@@ -57,6 +57,20 @@ jobs:
           cd build
           zip -qr WorkoutLog-unsigned.ipa Payload
           unzip -t WorkoutLog-unsigned.ipa
+          python3 - <<'PY'
+          import plistlib, zipfile
+          with zipfile.ZipFile("WorkoutLog-unsigned.ipa") as package:
+              app = plistlib.loads(package.read("Payload/WorkoutLog.app/Info.plist"))
+              extension = plistlib.loads(package.read("Payload/WorkoutLog.app/PlugIns/WorkoutLogActivity.appex/Info.plist"))
+              assert app["CFBundleIdentifier"] == "com.hamzabehrem.workoutlog"
+              assert app["NSSupportsLiveActivities"] is True
+              assert "workoutlog" in app["CFBundleURLTypes"][0]["CFBundleURLSchemes"]
+              assert extension["CFBundleIdentifier"] == app["CFBundleIdentifier"] + ".activity"
+              assert extension["NSExtension"]["NSExtensionPointIdentifier"] == "com.apple.widgetkit-extension"
+              for key in ("CFBundleVersion", "CFBundleShortVersionString"):
+                  assert app[key] == extension[key], key
+              print("Validated app identity, URL scheme, Live Activity extension and versions")
+          PY
           shasum -a 256 WorkoutLog-unsigned.ipa
       - name: Upload installable package
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
