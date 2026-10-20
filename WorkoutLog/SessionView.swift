@@ -90,6 +90,7 @@ struct SessionView: View {
                 Spacer()
                 VideoButton(name: exercise, link: session.videoURLs?[exercise])
             }
+            .textCase(nil)
         }
     }
 
