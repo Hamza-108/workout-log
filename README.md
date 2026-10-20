@@ -19,9 +19,17 @@ The 0.3 preview adds a Live Activity extension. Preserve app extensions when Sid
 - **Finish** asks for confirmation before moving a workout to History. Cancel keeps logging.
 - Delete a finished workout from its detail screen, or swipe it in History. Confirmation names the workout/date. Templates and other workouts stay intact.
 
-## Import a template
+## Exercise library and video shortcuts
 
-Templates → **More (…) → Import template** shows the format, field explanations and **Copy example** in the app. Tap **Choose JSON file** to select a `.json` file:
+Templates → **More (…) → Exercise library** manages reusable exercises with a name and optional YouTube video link. In a template, **Add exercises** opens a searchable multi-select picker; **Create new exercise** works without leaving it. Selected exercises include their videos, start with 3 sets and can be reordered or given different counts per template.
+
+Templates and workouts keep independent copies. Renaming/deleting a library entry does not change saved templates or workouts; changing a template does not alter an already-started workout. Existing template exercise names populate the library once on upgrade. Deleting a library entry does not make it reappear on the next launch.
+
+An optional **Add video** field accepts HTTPS YouTube watch, short, Shorts or embed links. Links are normalized to a standard video address, dropping tracking, playlist and timestamp parameters. A small accessible play icon appears beside a linked exercise while logging. Tapping opens YouTube or the browser; the app does not fetch thumbnails, embed, autoplay or download video. Watching needs internet; logging remains offline.
+
+## Import / export templates or a whole plan
+
+Templates → **More (…) → Import template** accepts a JSON file **or typed/pasted plain text**. The screen shows both formats, field explanations and copyable examples. Single-template imports open the existing editor; whole-plan imports show all days before **Import all**. Cancel changes nothing. All templates and new library exercises are validated first and saved together.
 
 ```json
 {
@@ -33,9 +41,30 @@ Templates → **More (…) → Import template** shows the format, field explana
 }
 ```
 
-`name` is the template name; `exercises` is ordered. Each exercise object needs a non-empty `name` and an integer `sets` from 1 to 99. The older `"exercises":["Bench press","Overhead press"]` format still works, with 3 planned sets per exercise.
+Whole-plan format (replace the placeholder video ID with yours, or omit `videoURL`):
 
-Review/edit the prefilled editor, then Save. Cancel creates nothing. Each saved import is a new template with a new ID; existing templates are never replaced. Empty names and duplicate exercise names are rejected.
+```json
+{
+  "templates": [
+    {
+      "name": "Monday",
+      "exercises": [
+        {"name": "Bench press", "sets": 3, "videoURL": "https://www.youtube.com/watch?v=XXXXXXXXXXX"}
+      ]
+    },
+    {
+      "name": "Tuesday",
+      "exercises": [{"name": "Row", "sets": 3}]
+    }
+  ]
+}
+```
+
+`name` is the template name; `exercises` is ordered. Each exercise needs a non-empty `name`, an integer `sets` from 1 to 99 and optionally `videoURL`. The old `"exercises":["Bench press","Overhead press"]` format still works with 3 sets each. Both text and files have a 25 MiB UTF-8 limit. Empty names, duplicate exercises within a template, invalid links and conflicting video definitions for the same library exercise are rejected before saving.
+
+Imports create new templates; they never overwrite existing ones. The batch preview warns about repeated template names: importing again can create copies. Matching exercise-library definitions are reused; conflicting links require editing the JSON or library entry before retrying. Monday/Tuesday are names, not scheduled calendar events.
+
+**More (…) → Export templates** selects some/all templates, then **Save JSON file** or **Copy JSON**. Exports contain names, exercise order, counts and videos—not history, database IDs or app-identifying metadata. Legacy name-only templates export with 3 sets per exercise. For an exact data-preserving copy including legacy metadata, use a full backup instead.
 
 ## Backups
 
@@ -50,16 +79,17 @@ Import shows new/skipped counts and asks for confirmation. It adds missing recor
 
 Export your current data before resolving conflicting copies. Keep the original backup file. Imports do not include unsaved editor text, and importing an old backup can bring back records you deleted since exporting it.
 
-### Backup format (version 2)
+### Backup format (version 3)
 
 ```json
-{"schemaVersion":2,"preferredWeightUnit":"kg","templates":[],"sessions":[]}
+{"schemaVersion":3,"preferredWeightUnit":"kg","templates":[],"sessions":[]}
 ```
 
-The app still imports version 1 backups without inventing planned sets. New exports use version 2; older app versions cannot read them. Updating adds optional planning metadata to the database, without rewriting existing logged sets. Upgrade/reopen regression tests check the old stored fields.
+The app still imports version 1 and 2 backups. Version 1 does not invent planned sets. New exports use version 3; older app versions cannot read them. Full backups include unused library exercises as well as template/session video snapshots. Updating adds library tables and optional video metadata without rewriting existing logged sets. Upgrade/reopen regression tests check both previous stored-field layouts.
 
-- Template fields: `id` (UUID), `name`, ordered `exercises`, optional `setCounts` (one count per exercise, in the same order).
-- Session fields: `id`, `startedAt`, optional/null `finishedAt`, `templateName`, ordered `exercises`, `unit` (`kg`/`lb`), ordered logged `sets`, optional ordered `plannedSets` (`id`, `exercise`). A logged set uses its planned row's UUID, so logging a later row first does not move it to a different slot.
+- Optional `libraryExercises`: records with `id`, `name` and optional `videoURL`. Library IDs and case-insensitive names must be unique. The store-local setup marker is not exported.
+- Template fields: `id` (UUID), `name`, ordered `exercises`, optional `setCounts` (one count per exercise, in the same order), optional `videoURLs` mapping exact exercise names to canonical YouTube links.
+- Session fields: `id`, `startedAt`, optional/null `finishedAt`, `templateName`, ordered `exercises`, `unit` (`kg`/`lb`), ordered logged `sets`, optional ordered `plannedSets` (`id`, `exercise`). Optional `videoURLs` preserves this workout's own links. A logged set uses its planned row's UUID, so logging a later row first does not move it to a different slot.
 - Set fields: `id`, `exercise`, `weight`, `reps`, `rpe`. Weights/RPE are JSON numbers, independent of keyboard locale.
 - Dates use UTC ISO-8601 **millisecond precision**, e.g. `2026-01-01T12:00:00.123Z`. Conflict comparison uses that same precision.
 - Input/export limit: **25 MiB**. Invalid fields, duplicate record/set IDs, empty completed workouts and multiple drafts are rejected before insertion. Workouts do not need a surviving template.
