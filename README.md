@@ -11,7 +11,9 @@ The 0.3 preview adds a Live Activity extension. Preserve app extensions when Sid
 
 ## Logging
 
-- Make a template with ordered exercises. Choose kg/lb before starting; each workout keeps its original unit and exercise snapshot.
+- Make a template with ordered exercises and a set count per exercise (default 3, range 1–99). Choose kg/lb before starting; each workout keeps its original unit, exercise and planned-set snapshot.
+- Planned sets appear as **Not logged** rows. Tap any row to log it; add extra sets or swipe to remove planned/logged sets. These changes affect only this workout, not the template. Empty rows never count as logged sets or appear as performed sets in History.
+- Existing templates and unfinished workouts keep their old behavior until you explicitly edit a template. Editing it does not change an already-started workout.
 - Log weight, positive whole-number reps and exertion/RPE 0–10. Zero weight is allowed. Tap a saved set to edit it; swipe to delete with confirmation.
 - **Close** leaves the workout unfinished and resumable. Saved sets persist; text still in an unsaved editor does not.
 - **Finish** asks for confirmation before moving a workout to History. Cancel keeps logging.
@@ -19,11 +21,19 @@ The 0.3 preview adds a Live Activity extension. Preserve app extensions when Sid
 
 ## Import a template
 
-Templates → **More (…) → Import template** → select a `.json` file:
+Templates → **More (…) → Import template** shows the format, field explanations and **Copy example** in the app. Tap **Choose JSON file** to select a `.json` file:
 
 ```json
-{"name":"Push day","exercises":["Bench press","Overhead press","Triceps pushdown"]}
+{
+  "name": "Push day",
+  "exercises": [
+    {"name": "Bench press", "sets": 3},
+    {"name": "Overhead press", "sets": 2}
+  ]
+}
 ```
+
+`name` is the template name; `exercises` is ordered. Each exercise object needs a non-empty `name` and an integer `sets` from 1 to 99. The older `"exercises":["Bench press","Overhead press"]` format still works, with 3 planned sets per exercise.
 
 Review/edit the prefilled editor, then Save. Cancel creates nothing. Each saved import is a new template with a new ID; existing templates are never replaced. Empty names and duplicate exercise names are rejected.
 
@@ -40,14 +50,16 @@ Import shows new/skipped counts and asks for confirmation. It adds missing recor
 
 Export your current data before resolving conflicting copies. Keep the original backup file. Imports do not include unsaved editor text, and importing an old backup can bring back records you deleted since exporting it.
 
-### Backup format (version 1)
+### Backup format (version 2)
 
 ```json
-{"schemaVersion":1,"preferredWeightUnit":"kg","templates":[],"sessions":[]}
+{"schemaVersion":2,"preferredWeightUnit":"kg","templates":[],"sessions":[]}
 ```
 
-- Template fields: `id` (UUID), `name`, ordered `exercises`.
-- Session fields: `id`, `startedAt`, optional/null `finishedAt`, `templateName`, ordered `exercises`, `unit` (`kg`/`lb`), ordered `sets`.
+The app still imports version 1 backups without inventing planned sets. New exports use version 2; older app versions cannot read them. Updating adds optional planning metadata to the database, without rewriting existing logged sets. Upgrade/reopen regression tests check the old stored fields.
+
+- Template fields: `id` (UUID), `name`, ordered `exercises`, optional `setCounts` (one count per exercise, in the same order).
+- Session fields: `id`, `startedAt`, optional/null `finishedAt`, `templateName`, ordered `exercises`, `unit` (`kg`/`lb`), ordered logged `sets`, optional ordered `plannedSets` (`id`, `exercise`). A logged set uses its planned row's UUID, so logging a later row first does not move it to a different slot.
 - Set fields: `id`, `exercise`, `weight`, `reps`, `rpe`. Weights/RPE are JSON numbers, independent of keyboard locale.
 - Dates use UTC ISO-8601 **millisecond precision**, e.g. `2026-01-01T12:00:00.123Z`. Conflict comparison uses that same precision.
 - Input/export limit: **25 MiB**. Invalid fields, duplicate record/set IDs, empty completed workouts and multiple drafts are rejected before insertion. Workouts do not need a surviving template.
