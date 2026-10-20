@@ -1,0 +1,98 @@
+name: iOS build and smoke test
+
+on:
+  push:
+    branches: [main, 'chore/**', 'feat/**', 'fix/**', 'ci/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_16.4.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Generate Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -version
+      - name: Launch on an available simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -runFirstLaunch
+          xcrun simctl list devices available
+          xcodebuild -project WorkoutLog.xcodeproj -scheme WorkoutLog -showdestinations > "$RUNNER_TEMP/destinations.txt"
+          cat "$RUNNER_TEMP/destinations.txt"
+          simulator_id=$(sed -nE '/platform:iOS Simulator.*name:iPhone/ s/.*id:([0-9A-Fa-f-]{36}).*/\1/p' "$RUNNER_TEMP/destinations.txt" | head -n 1)
+          test -n "$simulator_id"
+          xcodebuild test \
+            -project WorkoutLog.xcodeproj -scheme WorkoutLog \
+            -destination "platform=iOS Simulator,id=$simulator_id" \
+            -parallel-testing-enabled NO \
+            -resultBundlePath build/SmokeTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Build unsigned device app
+        run: |
+          xcodebuild build \
+            -project WorkoutLog.xcodeproj -scheme WorkoutLog \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Package IPA for SideStore
+        run: |
+          mkdir -p build/Payload
+          cp -R build/DerivedData/Build/Products/Release-iphoneos/WorkoutLog.app build/Payload/
+          cd build
+          zip -qr WorkoutLog-unsigned.ipa Payload
+          unzip -t WorkoutLog-unsigned.ipa
+          shasum -a 256 WorkoutLog-unsigned.ipa
+      - name: Upload installable package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: WorkoutLog-unsigned
+          path: build/WorkoutLog-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload simulator test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: SmokeTests
+          path: build/SmokeTests.xcresult
+          if-no-files-found: warn
+          retention-days: 3
+
+  release:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish a versioned IPA after successful main build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GH_RUN_ID: ${{ github.run_id }}
+          GH_RUN_NUMBER: ${{ github.run_number }}
+          GH_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          gh run download "$GH_RUN_ID" -n WorkoutLog-unsigned -D package
+          gh release create "build-$GH_RUN_NUMBER-$GH_RUN_ATTEMPT" \
+            package/WorkoutLog-unsigned.ipa \
+            --target "$GH_SHA" --title "Workout Log build $GH_RUN_NUMBER" \
+            --notes "Unsigned IPA for SideStore. Commit: $GH_SHA. See README.md for installation and current feature status." \
+            --latest
