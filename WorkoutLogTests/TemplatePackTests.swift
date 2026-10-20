@@ -325,6 +325,34 @@ final class TemplatePackTests: XCTestCase {
         XCTAssertThrowsError(try DataTransfer.apply(backup, in: target.mainContext))
     }
 
+    func testTimestampSurvivesTemplateLibrarySessionAndBackupTransfers() throws {
+        let text = """
+        {"name":"Monday","exercises":[{"name":"Bench","sets":3,"videoURL":"https://youtu.be/\(videoID)?t=1m30s&si=tracking"}]}
+        """
+        let drafts = try TemplatePack.decode(Data(text.utf8))
+        let expected = canonical + "&t=90"
+        XCTAssertEqual(drafts[0].videoURLs?["Bench"], expected)
+        let source = try store()
+        try TemplatePack.apply(drafts, in: source.mainContext)
+        let template = try XCTUnwrap(source.mainContext.fetch(FetchDescriptor<WorkoutTemplate>()).first)
+        let library = try XCTUnwrap(source.mainContext.fetch(FetchDescriptor<LibraryExercise>()).first)
+        XCTAssertEqual(library.videoURL, expected)
+        let session = try WorkoutSession.start(template: template, unit: .kg, in: source.mainContext)
+        XCTAssertEqual(session.videoURLs?["Bench"], expected)
+        let shared = try TemplatePack.decode(TemplatePack.encode([TemplatePack.draft(template)]))
+        XCTAssertEqual(shared[0].videoURLs?["Bench"], expected)
+        let backup = try DataTransfer.decode(DataTransfer.encode(DataTransfer.snapshot(in: source.mainContext, unit: .kg)))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutLog-timestamp-\(UUID()).store")
+        do {
+            let target = try store(url: url)
+            try DataTransfer.apply(backup, in: target.mainContext)
+        }
+        let reopened = try store(url: url)
+        XCTAssertEqual(try reopened.mainContext.fetch(FetchDescriptor<LibraryExercise>()).first?.videoURL, expected)
+        XCTAssertEqual(try reopened.mainContext.fetch(FetchDescriptor<WorkoutTemplate>()).first?.videoURLs?["Bench"], expected)
+        XCTAssertEqual(try reopened.mainContext.fetch(FetchDescriptor<WorkoutSession>()).first?.videoURLs?["Bench"], expected)
+    }
+
     func testFailedPackSaveLeavesTheSavedFileUnchanged() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutLog-pack-readonly-\(UUID()).store")
         do {
