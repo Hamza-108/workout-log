@@ -49,7 +49,7 @@ final class UpgradeTests: XCTestCase {
         let templateID = UUID(), draftID = UUID(), historyID = UUID()
         let set = LoggedSet(exercise: "Bench", weight: 45, reps: 8, rpe: 7.5)
         try writeLegacyStore(url, templateID: templateID, draftID: draftID, historyID: historyID, set: set)
-        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self])
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self])
         let config = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
         let db = try ModelContainer(for: schema, configurations: [config])
         db.mainContext.autosaveEnabled = false

@@ -5,7 +5,7 @@ import XCTest
 @MainActor
 final class HistoryPersistenceTests: XCTestCase {
     func testDeletingHistoryKeepsTemplateAndDraftAfterReopen() throws {
-        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self])
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self])
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutLog-delete-\(UUID()).store")
         let config = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
         var expectedDraft: UUID?
