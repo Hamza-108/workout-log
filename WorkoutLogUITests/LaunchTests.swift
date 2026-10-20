@@ -30,7 +30,8 @@ final class LaunchTests: XCTestCase {
         let address = safari.textFields.firstMatch
         XCTAssertTrue(address.waitForExistence(timeout: 10), safari.debugDescription)
         address.tap()
-        if safari.buttons["Clear text"].exists { safari.buttons["Clear text"].tap() }
+        let clear = safari.buttons["Clear text"]
+        if clear.exists && clear.isEnabled && clear.isHittable { clear.tap() }
         address.typeText(url.absoluteString + "\n")
         let open = safari.buttons["Open"].firstMatch
         if open.waitForExistence(timeout: 5) { open.tap() }
