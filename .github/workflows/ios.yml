@@ -40,7 +40,6 @@ jobs:
           xcodebuild test \
             -project WorkoutLog.xcodeproj -scheme WorkoutLog \
             -destination "platform=iOS Simulator,id=$simulator_id" \
-            -only-testing:WorkoutLogUITests/LaunchTests/testColdWarmAndStaleSessionLinks \
             -parallel-testing-enabled NO \
             -resultBundlePath build/SmokeTests.xcresult \
             CODE_SIGNING_ALLOWED=NO

@@ -120,9 +120,6 @@ struct TemplatesView: View {
         .onAppear { isVisible = true; openRequestedSession() }
         .onDisappear { isVisible = false }
         .onChange(of: resumeID, initial: true) { _, id in
-            #if DEBUG
-            print("ROUTE_TRACE requested ID: \(String(describing: id)), visible: \(isVisible)")
-            #endif
             guard let id else { return }
             if activeSession?.id == id { resumeID = nil; return }
             if creating || editing != nil || importedDraft != nil {
@@ -147,17 +144,11 @@ struct TemplatesView: View {
     }
 
     private func resume(_ session: WorkoutSession) {
-        #if DEBUG
-        print("ROUTE_TRACE presenting saved session")
-        #endif
         activeSession = session
         activities.resume(session.id)
     }
 
     private func openRequestedSession() {
-        #if DEBUG
-        print("ROUTE_TRACE attempting presentation, pending: \(resumeID != nil), visible: \(isVisible)")
-        #endif
         guard isVisible, let id = resumeID else { return }
         resumeID = nil
         do {
