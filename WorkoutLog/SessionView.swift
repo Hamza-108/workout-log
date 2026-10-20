@@ -49,6 +49,7 @@ struct SessionView: View {
             }
             Section {
                 Button("Discard workout", role: .destructive) { discarding = true }
+                    .accessibilityIdentifier("discardWorkout")
             }
         }
         .navigationTitle(session.templateName)

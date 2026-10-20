@@ -1,6 +1,11 @@
 import XCTest
 
 final class LaunchTests: XCTestCase {
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        continueAfterFailure = false
+    }
+
     private func launchApp(backup: String? = nil, template: String? = nil) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchEnvironment["WORKOUT_LOG_TEST_STORE"] = UUID().uuidString
@@ -122,7 +127,7 @@ final class LaunchTests: XCTestCase {
         app.tabBars.buttons["History"].tap()
         XCTAssertTrue(app.buttons["history-Old Push"].waitForExistence(timeout: 10))
         app.open(url)
-        XCTAssertTrue(app.buttons["addSet-Bench"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["addSet-Bench"].waitForExistence(timeout: 10), app.debugDescription)
         let set = app.descendants(matching: .any).matching(identifier: "loggedSet").firstMatch
         XCTAssertTrue(set.label.contains("45 lb"))
         XCTAssertTrue(set.label.contains("exertion 7.5"))
@@ -205,6 +210,29 @@ final class LaunchTests: XCTestCase {
         XCTAssertFalse(app.buttons["startWorkout-Imported Plan"].isEnabled)
         app.tabBars.buttons["History"].tap()
         XCTAssertTrue(app.staticTexts["No workouts yet"].waitForExistence(timeout: 10))
+    }
+
+    func testCloseAndConfirmedDiscardKeepTemplate() {
+        let app = launchApp()
+        createTemplate(in: app)
+        app.buttons["startWorkout-Push day"].tap()
+        XCTAssertTrue(app.buttons["addSet-Bench"].waitForExistence(timeout: 10))
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.buttons["resumeWorkout"].waitForExistence(timeout: 10))
+        app.buttons["resumeWorkout"].tap()
+        XCTAssertTrue(app.buttons["discardWorkout"].waitForExistence(timeout: 10))
+        app.buttons["discardWorkout"].tap()
+        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 10))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["addSet-Bench"].exists)
+        app.buttons["discardWorkout"].tap()
+        app.buttons.matching(NSPredicate(format: "label == %@ AND identifier != %@", "Discard workout", "discardWorkout")).firstMatch.tap()
+        XCTAssertTrue(app.buttons["newTemplate"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["resumeWorkout"].exists)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["startWorkout-Push day"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["resumeWorkout"].exists)
     }
 
     func testDataScreenIsAccessible() {
