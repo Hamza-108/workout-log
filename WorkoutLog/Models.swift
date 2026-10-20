@@ -76,6 +76,19 @@ final class LibraryExercise {
         }
     }
 
+    // Keep the setup marker so clearing does not reseed entries from templates on launch.
+    static func clear(in context: ModelContext, expectedIDs: Set<UUID>) throws {
+        let saved = try context.fetch(FetchDescriptor<LibraryExercise>())
+        let currentIDs = Set(saved.map(\.id))
+        guard currentIDs == expectedIDs else {
+            throw LogError(message: "The exercise library changed since you confirmed. Check the current list and confirm clearing again.")
+        }
+        guard !saved.isEmpty else { return }
+        try context.commit {
+            for exercise in saved { context.delete(exercise) }
+        }
+    }
+
     static func seedOnce(in context: ModelContext) throws {
         guard try context.fetchCount(FetchDescriptor<LibrarySetup>()) == 0 else { return }
         let templates = try context.fetch(FetchDescriptor<WorkoutTemplate>(sortBy: [SortDescriptor(\.name)]))

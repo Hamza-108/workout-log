@@ -37,6 +37,8 @@ struct ExerciseLibraryView: View {
     @State private var creating = false
     @State private var editing: LibraryExercise?
     @State private var deleting: LibraryExercise?
+    @State private var clearIDs: Set<UUID> = []
+    @State private var confirmingClear = false
     @State private var error: String?
 
     var body: some View {
@@ -46,6 +48,12 @@ struct ExerciseLibraryView: View {
         .toolbar {
             Button("New exercise", systemImage: "plus") { creating = true }
                 .accessibilityIdentifier("newLibraryExercise")
+            Menu {
+                Button("Clear library", systemImage: "trash", role: .destructive) { prepareClear() }
+                    .disabled(exercises.isEmpty)
+                    .accessibilityIdentifier("clearLibrary")
+            } label: { Label("More", systemImage: "ellipsis.circle") }
+                .accessibilityIdentifier("libraryActions")
         }
         .sheet(isPresented: $creating) { NavigationStack { LibraryExerciseEditor() } }
         .sheet(item: $editing) { exercise in NavigationStack { LibraryExerciseEditor(exercise: exercise) } }
@@ -57,6 +65,13 @@ struct ExerciseLibraryView: View {
                 self.deleting = nil
             }
         } message: { Text("Existing templates and saved workouts keep their own copies.") }
+        .confirmationDialog("Clear exercise library?", isPresented: $confirmingClear, titleVisibility: .visible) {
+            Button("Clear library", role: .destructive) { performClear() }
+                .accessibilityIdentifier("confirmClearLibrary")
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes \(clearIDs.count) \(clearIDs.count == 1 ? "exercise" : "exercises") from the library. Export a backup first: this cannot be undone. Templates, saved workouts and calendar are not affected.")
+        }
         .alert("Could not save", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
@@ -71,6 +86,16 @@ struct ExerciseLibraryView: View {
 
     private var filteredExercises: [LibraryExercise] {
         exercises.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }
+    }
+
+    private func prepareClear() {
+        clearIDs = Set(exercises.map(\.id))
+        confirmingClear = true
+    }
+
+    private func performClear() {
+        do { try LibraryExercise.clear(in: context, expectedIDs: clearIDs) }
+        catch { self.error = error.localizedDescription }
     }
 
     private func exerciseRow(_ exercise: LibraryExercise) -> some View {
