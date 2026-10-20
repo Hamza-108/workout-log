@@ -2,7 +2,7 @@ import SwiftData
 import SwiftUI
 
 private struct SetSelection: Identifiable {
-    let id = UUID()
+    var id = UUID()
     let exercise: String
     var existing: LoggedSet?
 }
