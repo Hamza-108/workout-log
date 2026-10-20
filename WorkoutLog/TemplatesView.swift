@@ -1,12 +1,23 @@
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct TemplatesView: View {
     @Environment(\.modelContext) private var context
+    @Environment(WorkoutActivityController.self) private var activities
+    @Binding var resumeID: UUID?
+    @Binding var routeMessage: String?
     @Query(sort: \WorkoutTemplate.name) private var templates: [WorkoutTemplate]
     @Query(filter: #Predicate<WorkoutSession> { $0.finishedAt == nil }, sort: \WorkoutSession.startedAt) private var drafts: [WorkoutSession]
     @AppStorage("weightUnit") private var unit = WeightUnit.kg.rawValue
     @State private var creating = false
+    @State private var importing = false
+    @State private var readingTemplate = false
+    @State private var isVisible = false
+    @State private var importedDraft: TemplateDraft?
+    #if DEBUG
+    @State private var testDraftLoaded = false
+    #endif
     @State private var editing: WorkoutTemplate?
     @State private var deleting: WorkoutTemplate?
     @State private var activeSession: WorkoutSession?
@@ -14,10 +25,13 @@ struct TemplatesView: View {
 
     var body: some View {
         List {
+            if readingTemplate { ProgressView("Reading template…") }
+            if let routeMessage { Section { Text(routeMessage).accessibilityIdentifier("routeMessage") } }
+            if let notice = activities.notice { Section { Text(notice).foregroundStyle(.secondary) } }
             if let draft = drafts.first {
                 Section("In progress") {
                     Button {
-                        activeSession = draft
+                        resume(draft)
                     } label: {
                         Label("Resume \(draft.templateName)", systemImage: "play.fill")
                     }
@@ -63,13 +77,57 @@ struct TemplatesView: View {
             }
         }
         .navigationTitle("Templates")
+        .task {
+            #if DEBUG
+            if !testDraftLoaded,
+               let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"], UUID(uuidString: testID) != nil,
+               let fixture = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_TEMPLATE"] {
+                testDraftLoaded = true
+                do { importedDraft = try TemplateDraft.decode(Data(fixture.utf8)) }
+                catch { self.error = error.localizedDescription }
+            }
+            #endif
+        }
         .toolbar {
             Button { creating = true } label: { Label("New template", systemImage: "plus") }
                 .accessibilityIdentifier("newTemplate")
+            Menu {
+                Button("Import template", systemImage: "square.and.arrow.down") { importing = true }
+                    .disabled(readingTemplate)
+                NavigationLink("Data and backups", value: HomeDestination.data)
+            } label: { Label("More", systemImage: "ellipsis.circle") }
+                .accessibilityIdentifier("templateActions")
         }
-        .sheet(isPresented: $creating) { NavigationStack { TemplateEditor() } }
-        .sheet(item: $editing) { template in NavigationStack { TemplateEditor(template: template) } }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+            switch result {
+            case .success(let url):
+                readingTemplate = true
+                Task {
+                    defer { readingTemplate = false }
+                    do {
+                        importedDraft = try await Task.detached(priority: .userInitiated) {
+                            try TemplateDraft.decode(DataTransfer.read(url))
+                        }.value
+                    } catch { self.error = error.localizedDescription }
+                }
+            case .failure(let error): self.error = DataTransfer.fileErrorMessage(error)
+            }
+        }
+        .sheet(item: $importedDraft, onDismiss: openRequestedSession) { draft in NavigationStack { TemplateEditor(draft: draft) } }
+        .sheet(isPresented: $creating, onDismiss: openRequestedSession) { NavigationStack { TemplateEditor() } }
+        .sheet(item: $editing, onDismiss: openRequestedSession) { template in NavigationStack { TemplateEditor(template: template) } }
         .fullScreenCover(item: $activeSession) { session in NavigationStack { SessionView(session: session) } }
+        .onAppear { isVisible = true; openRequestedSession() }
+        .onDisappear { isVisible = false }
+        .onChange(of: resumeID, initial: true) { _, id in
+            guard let id else { return }
+            if activeSession?.id == id { resumeID = nil; return }
+            if creating || editing != nil || importedDraft != nil {
+                creating = false
+                editing = nil
+                importedDraft = nil
+            } else { openRequestedSession() }
+        }
         .confirmationDialog("Delete template?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             Button("Delete template", role: .destructive) {
                 guard let template = deleting else { return }
@@ -80,14 +138,32 @@ struct TemplatesView: View {
         } message: {
             Text("Saved workouts and your current workout will not be changed.")
         }
-        .alert("Could not save", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+        .alert("Could not complete action", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
     }
 
+    private func resume(_ session: WorkoutSession) {
+        activeSession = session
+        activities.resume(session.id)
+    }
+
+    private func openRequestedSession() {
+        guard isVisible, let id = resumeID else { return }
+        resumeID = nil
+        do {
+            guard let session = try context.fetch(FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.finishedAt == nil })).first(where: { $0.id == id }) else {
+                routeMessage = "That unfinished workout is no longer available. Your data has not changed."
+                return
+            }
+            if activeSession?.id != id { resume(session) }
+        } catch { routeMessage = error.localizedDescription }
+    }
+
     private func start(_ template: WorkoutTemplate) {
         do {
-            activeSession = try WorkoutSession.start(template: template, unit: WeightUnit(rawValue: unit) ?? .kg, in: context)
+            let session = try WorkoutSession.start(template: template, unit: WeightUnit(rawValue: unit) ?? .kg, in: context)
+            resume(session)
         } catch {
             self.error = error.localizedDescription
         }
@@ -107,10 +183,10 @@ struct TemplateEditor: View {
     @State private var exercises: [ExerciseDraft]
     @State private var error: String?
 
-    init(template: WorkoutTemplate? = nil) {
+    init(template: WorkoutTemplate? = nil, draft: TemplateDraft? = nil) {
         self.template = template
-        _name = State(initialValue: template?.name ?? "")
-        _exercises = State(initialValue: (template?.exercises ?? [""]).map { ExerciseDraft(name: $0) })
+        _name = State(initialValue: template?.name ?? draft?.name ?? "")
+        _exercises = State(initialValue: (template?.exercises ?? draft?.exercises ?? [""]).map { ExerciseDraft(name: $0) })
     }
 
     var body: some View {

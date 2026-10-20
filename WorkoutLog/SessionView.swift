@@ -9,11 +9,13 @@ private struct SetSelection: Identifiable {
 
 struct SessionView: View {
     @Environment(\.modelContext) private var context
+    @Environment(WorkoutActivityController.self) private var activities
     @Environment(\.dismiss) private var dismiss
     @Bindable var session: WorkoutSession
     @State private var selection: SetSelection?
     @State private var deleting: LoggedSet?
     @State private var discarding = false
+    @State private var finishing = false
     @State private var error: String?
 
     var body: some View {
@@ -47,6 +49,7 @@ struct SessionView: View {
             }
             Section {
                 Button("Discard workout", role: .destructive) { discarding = true }
+                    .accessibilityIdentifier("discardWorkout")
             }
         }
         .navigationTitle(session.templateName)
@@ -54,7 +57,7 @@ struct SessionView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) {
-                Button("Finish") { finish() }
+                Button("Finish") { finishing = true }
                     .disabled(session.sets.isEmpty)
                     .accessibilityIdentifier("finishWorkout")
             }
@@ -70,10 +73,16 @@ struct SessionView: View {
                 deleting = nil
             }
         }
+        .confirmationDialog("Finish this workout?", isPresented: $finishing, titleVisibility: .visible) {
+            Button("Finish workout") { finish() }
+            Button("Keep logging", role: .cancel) {}
+        } message: { Text("This saves the workout to History. Close instead to keep it in progress.") }
         .confirmationDialog("Discard this workout?", isPresented: $discarding, titleVisibility: .visible) {
             Button("Discard workout", role: .destructive) {
                 do {
+                    let id = session.id
                     try context.commit { context.delete(session) }
+                    activities.end(id)
                     dismiss()
                 } catch { self.error = error.localizedDescription }
             }
@@ -86,6 +95,7 @@ struct SessionView: View {
     private func finish() {
         do {
             try context.commit { try session.finish() }
+            activities.end(session.id)
             dismiss()
         } catch { self.error = error.localizedDescription }
     }
@@ -116,7 +126,7 @@ private struct SetEditor: View {
     let existing: LoggedSet?
     @State private var weight: String
     @State private var reps: String
-    @State private var rpe: Int
+    @State private var rpe: Double
     @State private var error: String?
 
     init(session: WorkoutSession, exercise: String, existing: LoggedSet?) {
@@ -125,7 +135,7 @@ private struct SetEditor: View {
         self.existing = existing
         _weight = State(initialValue: existing.map { WeightInput.format($0.weight) } ?? "")
         _reps = State(initialValue: existing.map { String($0.reps) } ?? "")
-        _rpe = State(initialValue: existing.map { Int($0.rpe) } ?? 7)
+        _rpe = State(initialValue: existing?.rpe ?? 7)
     }
 
     var body: some View {
@@ -137,7 +147,7 @@ private struct SetEditor: View {
                 TextField("Reps", text: $reps)
                     .keyboardType(.numberPad)
                     .accessibilityIdentifier("setReps")
-                Stepper("Exertion (RPE): \(rpe) / 10", value: $rpe, in: 0...10)
+                Stepper("Exertion (RPE): \(rpe.formatted()) / 10", value: $rpe, in: 0...10)
                     .accessibilityIdentifier("setRPE")
             }
             Section {
@@ -163,7 +173,7 @@ private struct SetEditor: View {
             guard let parsedReps = Int(reps.trimmingCharacters(in: .whitespacesAndNewlines)), parsedReps > 0 else {
                 throw LogError(message: "Reps must be a positive whole number.")
             }
-            let set = LoggedSet(id: existing?.id ?? UUID(), exercise: exercise, weight: parsedWeight, reps: parsedReps, rpe: Double(rpe))
+            let set = LoggedSet(id: existing?.id ?? UUID(), exercise: exercise, weight: parsedWeight, reps: parsedReps, rpe: rpe)
             try context.commit { try session.record(set) }
             dismiss()
         } catch { self.error = error.localizedDescription }

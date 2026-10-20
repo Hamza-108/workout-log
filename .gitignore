@@ -14,3 +14,4 @@ DerivedData/
 *.store-shm
 *.store-wal
 .env
+WorkoutLog-backup-*.json
