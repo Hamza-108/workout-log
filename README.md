@@ -5,7 +5,7 @@ A simple offline iPhone workout log, built on GitHub Actions for SideStore sidel
 
 Download `WorkoutLog-unsigned.ipa` from a tested [release](https://github.com/Hamza-108/workout-log/releases), then install it through SideStore. Refresh before the free-account signing expiry (normally seven days).
 
-**Update over the existing app with the same Apple Account and app identity. Do not uninstall: that deletes local workouts.** Keep separate workout records until the on-phone checks below pass. Bundle ID stays `com.hamzabehrem.workoutlog`.
+**Update over the existing app with the same Apple Account and app identity. Do not uninstall: that deletes local workouts.** Keep separate workout records until the on-phone checks below pass.
 
 The 0.3 preview adds a Live Activity extension. Preserve app extensions when SideStore signs the IPA; the extension may consume another App ID under free-account limits. Signing/install acceptance on a real phone is still unverified. No paid membership, signing credentials in GitHub, server or App Group is required by the code.
 
