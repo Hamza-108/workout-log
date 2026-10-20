@@ -17,6 +17,22 @@ final class LaunchTests: XCTestCase {
         field.typeText(value)
     }
 
+    private func openFromSafari(_ url: URL, expecting app: XCUIApplication) {
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        safari.launchArguments = app.launchArguments
+        safari.launch()
+        if safari.buttons["Continue"].waitForExistence(timeout: 2) { safari.buttons["Continue"].tap() }
+        let address = safari.textFields["URL"]
+        XCTAssertTrue(address.waitForExistence(timeout: 10))
+        address.tap()
+        if safari.buttons["Clear text"].exists { safari.buttons["Clear text"].tap() }
+        address.typeText(url.absoluteString + "\n")
+        let open = safari.alerts.buttons["Open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10))
+        open.tap()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+    }
+
     private func createTemplate(in app: XCUIApplication) {
         app.buttons["newTemplate"].tap()
         enter("Push day", in: app.textFields["templateName"])
@@ -124,13 +140,13 @@ final class LaunchTests: XCTestCase {
         app.buttons["templateActions"].tap()
         app.buttons["Data and backups"].tap()
         XCTAssertTrue(app.buttons["exportBackup"].waitForExistence(timeout: 10))
-        app.open(url)
+        openFromSafari(url, expecting: app)
         XCTAssertTrue(app.buttons["addSet-Bench"].waitForExistence(timeout: 10))
         app.buttons["Close"].tap()
         XCTAssertTrue(app.buttons["newTemplate"].waitForExistence(timeout: 10))
         app.buttons["newTemplate"].tap()
         enter("Never saved", in: app.textFields["templateName"])
-        app.open(url)
+        openFromSafari(url, expecting: app)
         XCTAssertTrue(app.buttons["addSet-Bench"].waitForExistence(timeout: 10))
         app.buttons["Close"].tap()
         for text in ["workoutlog://session/33333333-3333-4333-8333-333333333333",
