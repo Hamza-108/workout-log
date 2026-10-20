@@ -25,6 +25,14 @@ struct WorkoutHomeView: View {
                     }
             }
                 .tabItem { Label("Templates", systemImage: "list.bullet.rectangle") }.tag(0)
+            NavigationStack {
+                CalendarView(routeID: resumeID) { id in
+                    tab = 0
+                    templatesPath = []
+                    resumeID = id
+                }
+            }
+                .tabItem { Label("Calendar", systemImage: "calendar") }.tag(2)
             NavigationStack { HistoryView() }
                 .tabItem { Label("History", systemImage: "clock") }.tag(1)
         }
