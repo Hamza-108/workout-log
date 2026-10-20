@@ -25,7 +25,9 @@ Templates → **More (…) → Exercise library** manages reusable exercises wit
 
 Templates and workouts keep independent copies. Renaming/deleting a library entry does not change saved templates or workouts; changing a template does not alter an already-started workout. Existing template exercise names populate the library once on upgrade. Deleting a library entry does not make it reappear on the next launch.
 
-An optional **Add video** field accepts HTTPS YouTube watch, short, Shorts or embed links. Links are normalized to a standard video address, dropping tracking, playlist and timestamp parameters. A small accessible play icon appears beside a linked exercise while logging. Tapping opens YouTube or the browser; the app does not fetch thumbnails, embed, autoplay or download video. Watching needs internet; logging remains offline.
+An optional **Add video** field accepts HTTPS YouTube watch, short, Shorts or embed links. Links are normalized to a standard video address, preserving start timestamps while dropping tracking and playlist parameters. A small accessible play icon appears beside a linked exercise while logging. Tapping opens YouTube or the browser; the app does not fetch thumbnails, embed, autoplay or download video. Watching needs internet; logging remains offline. Start times such as `?t=90`, `?t=90s`, `?t=1m30s`, `?start=90` and `#t=1m30s` are stored as `&t=90`. Invalid or conflicting times are rejected instead of silently discarded.
+
+**Timestamp repair:** 0.5.0 stripped timestamps when saving links. Updating cannot recover them: re-add the original timestamped URL to the exercise in each affected template (and the library for future selections). Existing workouts retain their earlier snapshots. Older builds may reject backups containing timestamped links.
 
 ## Import / export templates or a whole plan
 
