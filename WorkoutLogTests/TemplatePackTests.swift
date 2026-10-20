@@ -221,7 +221,7 @@ final class TemplatePackTests: XCTestCase {
         }
 
         let backup = try DataTransfer.snapshot(in: context, unit: .kg)
-        XCTAssertEqual(backup.schemaVersion, 3)
+        XCTAssertEqual(backup.schemaVersion, 4)
         XCTAssertEqual(backup.libraryExercises?.count, 2)
         XCTAssertEqual(backup.templates[0].videoURLs ?? [:], ["Bench": canonical])
         XCTAssertEqual(backup.sessions[0].videoURLs ?? [:], ["Bench": canonical])

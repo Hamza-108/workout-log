@@ -220,7 +220,7 @@ final class DataTransferTests: XCTestCase {
             try session.record(LoggedSet(id: slot.id, exercise: "Bench", weight: 20, reps: 8, rpe: 7.5))
         }
         let backup = try DataTransfer.snapshot(in: source.mainContext, unit: .lb)
-        XCTAssertEqual(backup.schemaVersion, 3)
+        XCTAssertEqual(backup.schemaVersion, 4)
         let decoded = try DataTransfer.decode(DataTransfer.encode(backup))
         XCTAssertEqual(decoded, backup)
         let target = try store()

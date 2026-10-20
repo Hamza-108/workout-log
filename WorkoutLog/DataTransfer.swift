@@ -178,6 +178,8 @@ enum DataTransfer {
         var sets: [LoggedSet]
         var plannedSets: [PlannedSet]? = nil
         var videoURLs: [String: String]? = nil
+        var sourceTemplateID: UUID? = nil
+        var completedDay: String? = nil
 
         init(_ model: WorkoutSession) throws {
             guard let unit = WeightUnit(rawValue: model.unit) else { throw LogError(message: "Unknown workout weight unit.") }
@@ -190,6 +192,8 @@ enum DataTransfer {
             sets = model.sets
             plannedSets = model.plannedSets
             videoURLs = model.videoURLs
+            sourceTemplateID = model.sourceTemplateID
+            completedDay = model.completedDay
         }
     }
 
@@ -200,15 +204,58 @@ enum DataTransfer {
         init(_ model: LibraryExercise) { id = model.id; name = model.name; videoURL = model.videoURL }
     }
 
+    struct CalendarEntry: Codable, Identifiable, Equatable {
+        var id: UUID
+        var startDay: String
+        var endDay: String?
+        var weekday: Int?
+        var kind: String
+        var templateID: UUID?
+        var templateName: String?
+        init(_ model: CalendarRule) {
+            id = model.id; startDay = model.startDay; endDay = model.endDay
+            weekday = model.weekday; kind = model.kind; templateID = model.templateID; templateName = model.templateName
+        }
+        func model() throws -> CalendarRule {
+            guard let kind = PlanKind(rawValue: kind) else { throw LogError(message: "Unknown calendar assignment type.") }
+            let rule = CalendarRule(startDay: startDay, weekday: weekday, kind: kind, templateID: templateID, templateName: templateName)
+            rule.id = id; rule.endDay = endDay
+            return rule
+        }
+    }
+
+    struct Walk: Codable, Identifiable, Equatable {
+        var id: UUID
+        var day: String
+        init(_ model: WalkingCompletion) { id = model.id; day = model.day }
+        func model() -> WalkingCompletion {
+            let walk = WalkingCompletion(day: day); walk.id = id; return walk
+        }
+    }
+
     struct Backup: Codable, Equatable {
-        var schemaVersion = 3
+        var schemaVersion = 4
         var preferredWeightUnit: WeightUnit
         var templates: [Template]
         var sessions: [Session]
         var libraryExercises: [Exercise]? = nil
+        var calendarRules: [CalendarEntry]? = nil
+        var walkingCompletions: [Walk]? = nil
 
         func validate() throws {
-            guard (1...3).contains(schemaVersion) else { throw LogError(message: "Unsupported backup version: \(schemaVersion).") }
+            guard (1...4).contains(schemaVersion) else { throw LogError(message: "Unsupported backup version: \(schemaVersion).") }
+            if schemaVersion < 4 {
+                guard (calendarRules ?? []).isEmpty, (walkingCompletions ?? []).isEmpty,
+                      sessions.allSatisfy({ $0.sourceTemplateID == nil && $0.completedDay == nil }) else {
+                    throw LogError(message: "Calendar data requires backup version 4.")
+                }
+            }
+            let rules = calendarRules ?? [], walks = walkingCompletions ?? []
+            guard Set(rules.map(\.id)).count == rules.count, Set(walks.map(\.id)).count == walks.count,
+                  Set(walks.map(\.day)).count == walks.count, walks.allSatisfy({ Schedule.validDay($0.day) }) else {
+                throw LogError(message: "The calendar contains duplicate IDs, walking days or invalid dates.")
+            }
+            try Schedule.validate(rules.map { try $0.model() })
             if schemaVersion < 3 {
                 guard (libraryExercises ?? []).isEmpty, templates.allSatisfy({ $0.videoURLs == nil }), sessions.allSatisfy({ $0.videoURLs == nil }) else {
                     throw LogError(message: "Exercise libraries and video links require backup version 3.")
@@ -240,6 +287,9 @@ enum DataTransfer {
             for session in sessions {
                 try DataTransfer.validateNames(session.templateName, exercises: session.exercises)
                 try VideoLink.validate(session.videoURLs, exercises: session.exercises)
+                if let day = session.completedDay {
+                    guard session.finishedAt != nil, Schedule.validDay(day) else { throw LogError(message: "Invalid workout completion day.") }
+                }
                 _ = try DataTransfer.date(session.startedAt)
                 if let finishedAt = session.finishedAt {
                     _ = try DataTransfer.date(finishedAt)
@@ -278,9 +328,13 @@ enum DataTransfer {
         var restorePreference: Bool
         var libraryExercises: [Exercise] = []
         var skippedExercises: Int = 0
+        var calendarRules: [CalendarEntry] = []
+        var walkingCompletions: [Walk] = []
+        var skippedRules: Int = 0
+        var skippedWalks: Int = 0
 
         var summary: String {
-            "Library exercises: \(libraryExercises.count) new, \(skippedExercises) already saved.\nTemplates: \(templates.count) new, \(skippedTemplates) already saved.\nWorkouts: \(sessions.count) new, \(skippedSessions) already saved.\nUnfinished workouts to add: \(sessions.filter { $0.finishedAt == nil }.count)."
+            "Calendar assignments: \(calendarRules.count) new, \(skippedRules) already saved.\nWalking completions: \(walkingCompletions.count) new, \(skippedWalks) already saved.\nLibrary exercises: \(libraryExercises.count) new, \(skippedExercises) already saved.\nTemplates: \(templates.count) new, \(skippedTemplates) already saved.\nWorkouts: \(sessions.count) new, \(skippedSessions) already saved.\nUnfinished workouts to add: \(sessions.filter { $0.finishedAt == nil }.count)."
         }
     }
 
@@ -343,7 +397,13 @@ enum DataTransfer {
         let templates = try context.fetch(FetchDescriptor<WorkoutTemplate>(sortBy: [SortDescriptor(\.name)]))
         let sessions = try context.fetch(FetchDescriptor<WorkoutSession>(sortBy: [SortDescriptor(\.startedAt)]))
         let library = try context.fetch(FetchDescriptor<LibraryExercise>(sortBy: [SortDescriptor(\.name)]))
-        let backup = try Backup(preferredWeightUnit: unit, templates: templates.map(Template.init), sessions: sessions.map(Session.init), libraryExercises: library.isEmpty ? nil : library.map(Exercise.init))
+        let rules = try context.fetch(FetchDescriptor<CalendarRule>()).sorted {
+            $0.startDay == $1.startDay ? $0.id.uuidString < $1.id.uuidString : $0.startDay < $1.startDay
+        }
+        let walks = try context.fetch(FetchDescriptor<WalkingCompletion>(sortBy: [SortDescriptor(\.day)]))
+        let backup = try Backup(preferredWeightUnit: unit, templates: templates.map(Template.init), sessions: sessions.map(Session.init), libraryExercises: library.isEmpty ? nil : library.map(Exercise.init),
+                                calendarRules: rules.isEmpty ? nil : rules.map(CalendarEntry.init),
+                                walkingCompletions: walks.isEmpty ? nil : walks.map(Walk.init))
         try backup.validate()
         return backup
     }
@@ -399,14 +459,24 @@ enum DataTransfer {
                 }
             } else { exercises.append(exercise) }
         }
+        let rules = try additions(backup.calendarRules ?? [], existing: existing.calendarRules ?? [])
+        let walks = try additions(backup.walkingCompletions ?? [], existing: existing.walkingCompletions ?? [])
+        try Schedule.validate(((existing.calendarRules ?? []) + rules).map { try $0.model() })
+        let combinedWalks = (existing.walkingCompletions ?? []) + walks
+        guard Set(combinedWalks.map(\.day)).count == combinedWalks.count else {
+            throw LogError(message: "A different walking completion already exists on that day. No records were imported.")
+        }
         guard (existing.sessions + sessions).filter({ $0.finishedAt == nil }).count <= 1 else {
             throw LogError(message: "Finish or discard your current workout before importing a different unfinished workout.")
         }
         return Preview(templates: templates, sessions: sessions,
                        skippedTemplates: backup.templates.count - templates.count,
                        skippedSessions: backup.sessions.count - sessions.count,
-                       restorePreference: existing.templates.isEmpty && existing.sessions.isEmpty && (existing.libraryExercises ?? []).isEmpty,
-                       libraryExercises: exercises, skippedExercises: incomingLibrary.count - exercises.count)
+                       restorePreference: existing.templates.isEmpty && existing.sessions.isEmpty && (existing.libraryExercises ?? []).isEmpty && (existing.calendarRules ?? []).isEmpty && (existing.walkingCompletions ?? []).isEmpty,
+                       libraryExercises: exercises, skippedExercises: incomingLibrary.count - exercises.count,
+                       calendarRules: rules, walkingCompletions: walks,
+                       skippedRules: (backup.calendarRules ?? []).count - rules.count,
+                       skippedWalks: (backup.walkingCompletions ?? []).count - walks.count)
     }
 
     @discardableResult
@@ -421,6 +491,8 @@ enum DataTransfer {
             session.sets = record.sets
             session.plannedSets = record.plannedSets
             session.videoURLs = record.videoURLs
+            session.sourceTemplateID = record.sourceTemplateID
+            session.completedDay = record.completedDay
             return session
         }
         let templates = preview.templates.map { record in
@@ -433,7 +505,11 @@ enum DataTransfer {
             exercise.id = record.id
             return exercise
         }
+        let rules = try preview.calendarRules.map { try $0.model() }
+        let walks = preview.walkingCompletions.map { $0.model() }
         try context.commit {
+            for rule in rules { context.insert(rule) }
+            for walk in walks { context.insert(walk) }
             for exercise in exercises { context.insert(exercise) }
             for template in templates { context.insert(template) }
             for session in sessions { context.insert(session) }
