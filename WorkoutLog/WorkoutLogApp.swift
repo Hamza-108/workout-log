@@ -24,6 +24,7 @@ struct WorkoutLogApp: App {
             let context = ModelContext(container)
             context.autosaveEnabled = false
             #if DEBUG
+            print("ROUTE_TRACE launch arguments: \(ProcessInfo.processInfo.arguments)")
             if let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"], UUID(uuidString: testID) != nil,
                let fixture = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_BACKUP"],
                try context.fetchCount(FetchDescriptor<WorkoutTemplate>()) == 0,

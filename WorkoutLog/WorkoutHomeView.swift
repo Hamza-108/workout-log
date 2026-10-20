@@ -23,7 +23,15 @@ struct WorkoutHomeView: View {
             NavigationStack { HistoryView() }
                 .tabItem { Label("History", systemImage: "clock") }.tag(1)
         }
+        .onAppear {
+            #if DEBUG
+            print("ROUTE_TRACE home appeared, draft count: \(drafts.count)")
+            #endif
+        }
         .onOpenURL { url in
+            #if DEBUG
+            print("ROUTE_TRACE home URL: \(url.absoluteString)")
+            #endif
             tab = 0
             templatesPath = []
             do {
@@ -34,6 +42,9 @@ struct WorkoutHomeView: View {
                     return
                 }
                 routeMessage = nil
+                #if DEBUG
+                print("ROUTE_TRACE matched saved draft")
+                #endif
                 resumeID = id
             } catch { routeMessage = "Could not open the saved workout: \(error.localizedDescription)" }
         }
