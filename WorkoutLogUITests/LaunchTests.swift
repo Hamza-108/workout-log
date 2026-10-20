@@ -94,7 +94,7 @@ final class LaunchTests: XCTestCase {
       "schemaVersion": 1, "preferredWeightUnit": "kg",
       "templates": [{"id":"11111111-1111-4111-8111-111111111111","name":"Imported Plan","exercises":["Bench"]}],
       "sessions": [
-        {"id":"22222222-2222-4222-8222-222222222222","templateName":"Active Push","exercises":["Bench"],"unit":"lb","startedAt":"2026-01-01T12:00:00.000Z","finishedAt":null,"sets":[{"id":"44444444-4444-4444-8444-444444444444","exercise":"Bench","weight":45,"reps":5,"rpe":7}]},
+        {"id":"22222222-2222-4222-8222-222222222222","templateName":"Active Push","exercises":["Bench"],"unit":"lb","startedAt":"2026-01-01T12:00:00.000Z","finishedAt":null,"sets":[{"id":"44444444-4444-4444-8444-444444444444","exercise":"Bench","weight":45,"reps":5,"rpe":7.5}]},
         {"id":"33333333-3333-4333-8333-333333333333","templateName":"Old Push","exercises":["Bench"],"unit":"kg","startedAt":"2025-12-01T12:00:00.000Z","finishedAt":"2025-12-01T13:00:00.000Z","sets":[{"id":"55555555-5555-4555-8555-555555555555","exercise":"Bench","weight":20,"reps":8,"rpe":6}]}
       ]
     }
@@ -109,6 +109,12 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(app.buttons["addSet-Bench"].waitForExistence(timeout: 10))
         let set = app.descendants(matching: .any).matching(identifier: "loggedSet").firstMatch
         XCTAssertTrue(set.label.contains("45 lb"))
+        XCTAssertTrue(set.label.contains("exertion 7.5"))
+        set.tap()
+        XCTAssertTrue(app.buttons["saveSet"].waitForExistence(timeout: 10))
+        app.buttons["saveSet"].tap()
+        XCTAssertTrue(set.waitForExistence(timeout: 10))
+        XCTAssertTrue(set.label.contains("exertion 7.5"))
         app.buttons["Close"].tap()
         app.terminate()
         app.open(url)

@@ -24,7 +24,7 @@ final class DataTransferTests: XCTestCase {
         }
         let draft = try WorkoutSession.start(template: template, unit: .lb, in: context)
         try context.commit {
-            try draft.record(LoggedSet(exercise: "Bench", weight: 45, reps: 5, rpe: 7))
+            try draft.record(LoggedSet(exercise: "Bench", weight: 45, reps: 5, rpe: 7.5))
         }
         return try DataTransfer.snapshot(in: context, unit: .lb)
     }
