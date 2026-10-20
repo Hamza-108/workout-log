@@ -27,15 +27,14 @@ final class LaunchTests: XCTestCase {
         safari.launchArguments = app.launchArguments
         safari.launch()
         if safari.buttons["Continue"].waitForExistence(timeout: 2) { safari.buttons["Continue"].tap() }
-        let address = safari.textFields["URL"]
-        XCTAssertTrue(address.waitForExistence(timeout: 10))
+        let address = safari.textFields.firstMatch
+        XCTAssertTrue(address.waitForExistence(timeout: 10), safari.debugDescription)
         address.tap()
         if safari.buttons["Clear text"].exists { safari.buttons["Clear text"].tap() }
         address.typeText(url.absoluteString + "\n")
-        let open = safari.alerts.buttons["Open"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10))
-        open.tap()
-        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10))
+        let open = safari.buttons["Open"].firstMatch
+        if open.waitForExistence(timeout: 5) { open.tap() }
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 10), safari.debugDescription)
     }
 
     private func createTemplate(in app: XCUIApplication) {
