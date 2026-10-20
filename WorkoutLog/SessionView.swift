@@ -9,6 +9,7 @@ private struct SetSelection: Identifiable {
 
 struct SessionView: View {
     @Environment(\.modelContext) private var context
+    @Environment(WorkoutActivityController.self) private var activities
     @Environment(\.dismiss) private var dismiss
     @Bindable var session: WorkoutSession
     @State private var selection: SetSelection?
@@ -78,7 +79,9 @@ struct SessionView: View {
         .confirmationDialog("Discard this workout?", isPresented: $discarding, titleVisibility: .visible) {
             Button("Discard workout", role: .destructive) {
                 do {
+                    let id = session.id
                     try context.commit { context.delete(session) }
+                    activities.end(id)
                     dismiss()
                 } catch { self.error = error.localizedDescription }
             }
@@ -91,6 +94,7 @@ struct SessionView: View {
     private func finish() {
         do {
             try context.commit { try session.finish() }
+            activities.end(session.id)
             dismiss()
         } catch { self.error = error.localizedDescription }
     }

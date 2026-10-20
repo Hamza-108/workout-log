@@ -12,7 +12,13 @@ targets:
   WorkoutLog:
     type: application
     platform: iOS
-    sources: [WorkoutLog]
+    sources:
+      - path: WorkoutLog
+        excludes: [Info.plist]
+      - path: Shared
+    dependencies:
+      - target: WorkoutLogActivity
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.hamzabehrem.workoutlog
@@ -20,8 +26,26 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_CFBundleDisplayName: Workout Log
-        MARKETING_VERSION: "0.2.0"
-        CURRENT_PROJECT_VERSION: "2"
+        INFOPLIST_FILE: WorkoutLog/Info.plist
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "3"
+  WorkoutLogActivity:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: WorkoutLogActivity
+        excludes: [Info.plist]
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.hamzabehrem.workoutlog.activity
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: WorkoutLogActivity/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Workout Log Status
+        MARKETING_VERSION: "0.3.0"
+        CURRENT_PROJECT_VERSION: "3"
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
   WorkoutLogTests:
     type: bundle.unit-test
     platform: iOS

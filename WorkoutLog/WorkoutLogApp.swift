@@ -5,6 +5,7 @@ import SwiftUI
 struct WorkoutLogApp: App {
     @State private var storage: Result<(container: ModelContainer, context: ModelContext), Error>
     @State private var saveError: String?
+    @State private var activities = WorkoutActivityController()
 
     init() {
         _storage = State(initialValue: Result {
@@ -22,6 +23,15 @@ struct WorkoutLogApp: App {
             let container = try ModelContainer(for: schema, configurations: [configuration])
             let context = ModelContext(container)
             context.autosaveEnabled = false
+            #if DEBUG
+            if let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"], UUID(uuidString: testID) != nil,
+               let fixture = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_BACKUP"],
+               try context.fetchCount(FetchDescriptor<WorkoutTemplate>()) == 0,
+               try context.fetchCount(FetchDescriptor<WorkoutSession>()) == 0 {
+                let (_, preference) = try DataTransfer.apply(DataTransfer.decode(Data(fixture.utf8)), in: context)
+                if let preference { UserDefaults.standard.set(preference.rawValue, forKey: "weightUnit") }
+            }
+            #endif
             return (container, context)
         })
     }
@@ -40,12 +50,7 @@ struct WorkoutLogApp: App {
                 } else {
                     switch storage {
                     case .success(let data):
-                        TabView {
-                            NavigationStack { TemplatesView() }
-                                .tabItem { Label("Templates", systemImage: "list.bullet.rectangle") }
-                            NavigationStack { HistoryView() }
-                                .tabItem { Label("History", systemImage: "clock") }
-                        }
+                        WorkoutHomeView()
                         .environment(\.modelContext, data.context)
                         .modelContainer(data.container)
                         .id(ObjectIdentifier(data.context))
@@ -58,12 +63,16 @@ struct WorkoutLogApp: App {
                     }
                 }
             }
+            .environment(activities)
             .onReceive(NotificationCenter.default.publisher(for: .workoutSaveFailed)) { notification in
                 guard case .success(let data) = storage,
                       let failed = notification.object as? ModelContext, failed === data.context else { return }
                 let replacement = ModelContext(data.container)
                 replacement.autosaveEnabled = false
                 storage = .success((data.container, replacement))
+                if let drafts = try? replacement.fetch(FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.finishedAt == nil })) {
+                    activities.reconcile(activeID: drafts.first?.id)
+                }
                 saveError = notification.userInfo?["error"] as? String ?? "The change could not be saved."
             }
         }
