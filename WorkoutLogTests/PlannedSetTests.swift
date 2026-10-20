@@ -28,6 +28,8 @@ final class PlannedSetTests: XCTestCase {
             XCTAssertEqual(Set(slots.map(\.id)).count, 5)
             XCTAssertTrue(session.sets.isEmpty)
             XCTAssertThrowsError(try session.finish())
+            XCTAssertThrowsError(try session.record(LoggedSet(id: slots[0].id, exercise: "Press", weight: 0, reps: 1, rpe: 0)))
+            XCTAssertTrue(session.sets.isEmpty)
             actual = LoggedSet(id: slots[2].id, exercise: "Bench", weight: 45, reps: 8, rpe: 7.5)
             try context.commit {
                 try session.record(try XCTUnwrap(actual))
