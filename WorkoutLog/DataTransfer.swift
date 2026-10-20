@@ -5,40 +5,137 @@ struct TemplateDraft {
     var name: String
     var exercises: [String]
     var setCounts: [Int]
+    var videoURLs: [String: String]? = nil
 
     static let example = #"{"name":"Push day","exercises":[{"name":"Bench press","sets":3},{"name":"Overhead press","sets":2}]}"#
+    static let batchExample = #"{"templates":[{"name":"Monday","exercises":[{"name":"Bench press","sets":3,"videoURL":"https://www.youtube.com/watch?v=XXXXXXXXXXX"}]},{"name":"Tuesday","exercises":[{"name":"Row","sets":3}]}]}"#
 
-    private struct Input: Decodable {
+    static func decode(_ data: Data) throws -> TemplateDraft {
+        let drafts = try TemplatePack.decode(data)
+        guard drafts.count == 1 else { throw LogError(message: "Choose the batch preview to import multiple templates.") }
+        return drafts[0]
+    }
+}
+
+enum TemplatePack {
+    private struct Input: Codable {
         let name: String
         let exercises: [Exercise]
     }
-
-    private struct Exercise: Decodable {
+    private struct Exercise: Codable {
         let name: String
         let sets: Int
-
+        let videoURL: String?
+        init(name: String, sets: Int, videoURL: String?) {
+            self.name = name; self.sets = sets; self.videoURL = videoURL
+        }
         init(from decoder: Decoder) throws {
             let container = try decoder.singleValueContainer()
             if let name = try? container.decode(String.self) {
-                self.name = name
-                sets = 3
+                self.init(name: name, sets: 3, videoURL: nil)
             } else {
-                let value = try container.decode(Fields.self)
-                name = value.name
-                sets = value.sets
+                let fields = try container.decode(Fields.self)
+                self.init(name: fields.name, sets: fields.sets, videoURL: fields.videoURL)
             }
         }
-
-        private struct Fields: Decodable { let name: String; let sets: Int }
+        private struct Fields: Decodable { let name: String; let sets: Int; let videoURL: String? }
+    }
+    private struct Envelope: Codable { let templates: [Input] }
+    private struct Root: Decodable {
+        let templates: [Input]
+        enum Keys: String, CodingKey { case templates, schemaVersion, sessions }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Keys.self)
+            guard !c.contains(.schemaVersion), !c.contains(.sessions) else {
+                throw LogError(message: "This is a full backup. Use Data and backups → Import backup instead.")
+            }
+            if c.contains(.templates) { templates = try c.decode([Input].self, forKey: .templates) }
+            else { templates = [try Input(from: decoder)] }
+        }
     }
 
-    static func decode(_ data: Data) throws -> TemplateDraft {
+    static func decode(_ data: Data) throws -> [TemplateDraft] {
         try DataTransfer.checkSize(data.count)
-        let draft = try JSONDecoder().decode(Input.self, from: data)
-        let (name, exercises) = try WorkoutTemplate.validated(name: draft.name, exercises: draft.exercises.map(\.name))
-        let counts = draft.exercises.map(\.sets)
-        try WorkoutTemplate.validateSetCounts(counts, exercises: exercises)
-        return Self(name: name, exercises: exercises, setCounts: counts)
+        let inputs = try JSONDecoder().decode(Root.self, from: data).templates
+        guard !inputs.isEmpty else { throw LogError(message: "Add at least one template to import.") }
+        let drafts = try inputs.map { input in
+            let (name, exercises) = try WorkoutTemplate.validated(name: input.name, exercises: input.exercises.map(\.name))
+            let counts = input.exercises.map(\.sets)
+            try WorkoutTemplate.validateSetCounts(counts, exercises: exercises)
+            var videos: [String: String] = [:]
+            for (exercise, fields) in zip(exercises, input.exercises) {
+                if let link = try VideoLink.normalized(fields.videoURL) { videos[exercise] = link }
+            }
+            return TemplateDraft(name: name, exercises: exercises, setCounts: counts, videoURLs: videos.isEmpty ? nil : videos)
+        }
+        try validate(drafts)
+        return drafts
+    }
+
+    static func validate(_ drafts: [TemplateDraft]) throws {
+        guard !drafts.isEmpty else { throw LogError(message: "Select at least one template.") }
+        var definitions: [String: String] = [:]
+        for draft in drafts {
+            let (name, exercises) = try WorkoutTemplate.validated(name: draft.name, exercises: draft.exercises)
+            guard name == draft.name, exercises == draft.exercises else { throw LogError(message: "Trim template and exercise names before importing.") }
+            try WorkoutTemplate.validateSetCounts(draft.setCounts, exercises: exercises)
+            try VideoLink.validate(draft.videoURLs, exercises: exercises)
+            for exercise in exercises {
+                let key = exercise.lowercased(), video = draft.videoURLs?[exercise] ?? ""
+                if let previous = definitions[key], previous != video {
+                    throw LogError(message: "Conflicting video links for \(exercise). Use one definition before importing.")
+                }
+                definitions[key] = video
+            }
+        }
+    }
+
+    static func encode(_ drafts: [TemplateDraft]) throws -> Data {
+        try validate(drafts)
+        let inputs = drafts.map { draft in
+            Input(name: draft.name, exercises: draft.exercises.enumerated().map { index, name in
+                Exercise(name: name, sets: draft.setCounts[index], videoURL: draft.videoURLs?[name])
+            })
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = try encoder.encode(Envelope(templates: inputs))
+        try DataTransfer.checkSize(data.count)
+        return data
+    }
+
+    static func draft(_ template: WorkoutTemplate) -> TemplateDraft {
+        TemplateDraft(name: template.name, exercises: template.exercises,
+                      setCounts: template.setCounts ?? template.exercises.map { _ in 3 }, videoURLs: template.videoURLs)
+    }
+
+    static func checkLibrary(_ drafts: [TemplateDraft], in context: ModelContext) throws {
+        try validate(drafts)
+        let library = try context.fetch(FetchDescriptor<LibraryExercise>())
+        for draft in drafts {
+            for name in draft.exercises {
+                if let saved = library.first(where: { $0.name.lowercased() == name.lowercased() }),
+                   saved.videoURL != draft.videoURLs?[name] {
+                    throw LogError(message: "The library already has a different video for \(name). Edit the JSON or library entry before importing. Nothing was imported.")
+                }
+            }
+        }
+    }
+
+    static func apply(_ drafts: [TemplateDraft], in context: ModelContext) throws {
+        try checkLibrary(drafts, in: context)
+        var names = Set(try context.fetch(FetchDescriptor<LibraryExercise>()).map { $0.name.lowercased() })
+        var additions: [LibraryExercise] = []
+        for draft in drafts {
+            for name in draft.exercises where names.insert(name.lowercased()).inserted {
+                additions.append(LibraryExercise(name: name, videoURL: draft.videoURLs?[name]))
+            }
+        }
+        let templates = drafts.map { WorkoutTemplate(name: $0.name, exercises: $0.exercises, setCounts: $0.setCounts, videoURLs: $0.videoURLs) }
+        try context.commit {
+            for exercise in additions { context.insert(exercise) }
+            for template in templates { context.insert(template) }
+        }
     }
 }
 
@@ -50,12 +147,14 @@ enum DataTransfer {
         var name: String
         var exercises: [String]
         var setCounts: [Int]? = nil
+        var videoURLs: [String: String]? = nil
 
         init(_ model: WorkoutTemplate) {
             id = model.id
             name = model.name
             exercises = model.exercises
             setCounts = model.setCounts
+            videoURLs = model.videoURLs
         }
     }
 
@@ -68,6 +167,7 @@ enum DataTransfer {
         var unit: WeightUnit
         var sets: [LoggedSet]
         var plannedSets: [PlannedSet]? = nil
+        var videoURLs: [String: String]? = nil
 
         init(_ model: WorkoutSession) throws {
             guard let unit = WeightUnit(rawValue: model.unit) else { throw LogError(message: "Unknown workout weight unit.") }
@@ -79,17 +179,40 @@ enum DataTransfer {
             self.unit = unit
             sets = model.sets
             plannedSets = model.plannedSets
+            videoURLs = model.videoURLs
         }
     }
 
+    struct Exercise: Codable, Identifiable, Equatable {
+        var id: UUID
+        var name: String
+        var videoURL: String?
+        init(_ model: LibraryExercise) { id = model.id; name = model.name; videoURL = model.videoURL }
+    }
+
     struct Backup: Codable, Equatable {
-        var schemaVersion = 2
+        var schemaVersion = 3
         var preferredWeightUnit: WeightUnit
         var templates: [Template]
         var sessions: [Session]
+        var libraryExercises: [Exercise]? = nil
 
         func validate() throws {
-            guard (1...2).contains(schemaVersion) else { throw LogError(message: "Unsupported backup version: \(schemaVersion).") }
+            guard (1...3).contains(schemaVersion) else { throw LogError(message: "Unsupported backup version: \(schemaVersion).") }
+            if schemaVersion < 3 {
+                guard (libraryExercises ?? []).isEmpty, templates.allSatisfy({ $0.videoURLs == nil }), sessions.allSatisfy({ $0.videoURLs == nil }) else {
+                    throw LogError(message: "Exercise libraries and video links require backup version 3.")
+                }
+            }
+            let library = libraryExercises ?? []
+            guard Set(library.map(\.id)).count == library.count,
+                  Set(library.map { $0.name.lowercased() }).count == library.count else {
+                throw LogError(message: "The backup has duplicate library IDs or names.")
+            }
+            for exercise in library {
+                let (name, video) = try LibraryExercise.validated(name: exercise.name, videoURL: exercise.videoURL)
+                guard name == exercise.name, video == exercise.videoURL else { throw LogError(message: "Library names and video links must be normalized.") }
+            }
             if schemaVersion == 1 {
                 guard templates.allSatisfy({ $0.setCounts == nil }), sessions.allSatisfy({ $0.plannedSets == nil }) else {
                     throw LogError(message: "Planned sets require backup version 2.")
@@ -102,9 +225,11 @@ enum DataTransfer {
             for template in templates {
                 try DataTransfer.validateNames(template.name, exercises: template.exercises)
                 try WorkoutTemplate.validateSetCounts(template.setCounts, exercises: template.exercises)
+                try VideoLink.validate(template.videoURLs, exercises: template.exercises)
             }
             for session in sessions {
                 try DataTransfer.validateNames(session.templateName, exercises: session.exercises)
+                try VideoLink.validate(session.videoURLs, exercises: session.exercises)
                 _ = try DataTransfer.date(session.startedAt)
                 if let finishedAt = session.finishedAt {
                     _ = try DataTransfer.date(finishedAt)
@@ -141,9 +266,11 @@ enum DataTransfer {
         var skippedTemplates: Int
         var skippedSessions: Int
         var restorePreference: Bool
+        var libraryExercises: [Exercise] = []
+        var skippedExercises: Int = 0
 
         var summary: String {
-            "Templates: \(templates.count) new, \(skippedTemplates) already saved.\nWorkouts: \(sessions.count) new, \(skippedSessions) already saved.\nUnfinished workouts to add: \(sessions.filter { $0.finishedAt == nil }.count)."
+            "Library exercises: \(libraryExercises.count) new, \(skippedExercises) already saved.\nTemplates: \(templates.count) new, \(skippedTemplates) already saved.\nWorkouts: \(sessions.count) new, \(skippedSessions) already saved.\nUnfinished workouts to add: \(sessions.filter { $0.finishedAt == nil }.count)."
         }
     }
 
@@ -205,7 +332,8 @@ enum DataTransfer {
     static func snapshot(in context: ModelContext, unit: WeightUnit) throws -> Backup {
         let templates = try context.fetch(FetchDescriptor<WorkoutTemplate>(sortBy: [SortDescriptor(\.name)]))
         let sessions = try context.fetch(FetchDescriptor<WorkoutSession>(sortBy: [SortDescriptor(\.startedAt)]))
-        let backup = try Backup(preferredWeightUnit: unit, templates: templates.map(Template.init), sessions: sessions.map(Session.init))
+        let library = try context.fetch(FetchDescriptor<LibraryExercise>(sortBy: [SortDescriptor(\.name)]))
+        let backup = try Backup(preferredWeightUnit: unit, templates: templates.map(Template.init), sessions: sessions.map(Session.init), libraryExercises: library.isEmpty ? nil : library.map(Exercise.init))
         try backup.validate()
         return backup
     }
@@ -242,13 +370,19 @@ enum DataTransfer {
         let existing = try snapshot(in: context, unit: .kg)
         let templates = try additions(backup.templates, existing: existing.templates)
         let sessions = try additions(backup.sessions, existing: existing.sessions)
+        let exercises = try additions(backup.libraryExercises ?? [], existing: existing.libraryExercises ?? [])
+        let combined = (existing.libraryExercises ?? []) + exercises
+        guard Set(combined.map { $0.name.lowercased() }).count == combined.count else {
+            throw LogError(message: "A different library exercise already uses an imported name. No records were imported.")
+        }
         guard (existing.sessions + sessions).filter({ $0.finishedAt == nil }).count <= 1 else {
             throw LogError(message: "Finish or discard your current workout before importing a different unfinished workout.")
         }
         return Preview(templates: templates, sessions: sessions,
                        skippedTemplates: backup.templates.count - templates.count,
                        skippedSessions: backup.sessions.count - sessions.count,
-                       restorePreference: existing.templates.isEmpty && existing.sessions.isEmpty)
+                       restorePreference: existing.templates.isEmpty && existing.sessions.isEmpty && (existing.libraryExercises ?? []).isEmpty,
+                       libraryExercises: exercises, skippedExercises: (backup.libraryExercises ?? []).count - exercises.count)
     }
 
     @discardableResult
@@ -262,14 +396,21 @@ enum DataTransfer {
             session.finishedAt = try record.finishedAt.map(date)
             session.sets = record.sets
             session.plannedSets = record.plannedSets
+            session.videoURLs = record.videoURLs
             return session
         }
         let templates = preview.templates.map { record in
-            let template = WorkoutTemplate(name: record.name, exercises: record.exercises, setCounts: record.setCounts)
+            let template = WorkoutTemplate(name: record.name, exercises: record.exercises, setCounts: record.setCounts, videoURLs: record.videoURLs)
             template.id = record.id
             return template
         }
+        let exercises = preview.libraryExercises.map { record in
+            let exercise = LibraryExercise(name: record.name, videoURL: record.videoURL)
+            exercise.id = record.id
+            return exercise
+        }
         try context.commit {
+            for exercise in exercises { context.insert(exercise) }
             for template in templates { context.insert(template) }
             for session in sessions { context.insert(session) }
         }
