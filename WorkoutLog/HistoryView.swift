@@ -46,7 +46,11 @@ struct HistoryView: View {
 }
 
 private struct WorkoutDetailView: View {
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
     let session: WorkoutSession
+    @State private var deleting = false
+    @State private var error: String?
 
     var body: some View {
         List {
@@ -63,8 +67,23 @@ private struct WorkoutDetailView: View {
                     ForEach(sets) { set in SetRow(set: set, unit: session.unit) }
                 }
             }
+            Section {
+                Button("Delete workout", role: .destructive) { deleting = true }
+                    .accessibilityIdentifier("deleteSavedWorkout")
+            }
         }
         .navigationTitle(session.templateName)
         .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog("Delete saved workout?", isPresented: $deleting, titleVisibility: .visible) {
+            Button("Delete workout", role: .destructive) {
+                do {
+                    try context.commit { context.delete(session) }
+                    dismiss()
+                } catch { self.error = error.localizedDescription }
+            }
+        } message: { Text("This removes the workout and its sets, not the template. Export a backup first if you want to keep a copy.") }
+        .alert("Could not save", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+            Button("OK") { error = nil }
+        } message: { Text(error ?? "") }
     }
 }
