@@ -9,7 +9,7 @@ struct WorkoutLogApp: App {
 
     init() {
         _storage = State(initialValue: Result {
-            let schema = Schema([WorkoutTemplate.self, WorkoutSession.self])
+            let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self])
             let configuration: ModelConfiguration
             #if DEBUG
             // OS-initiated cold launches do not inherit XCTest's environment.
@@ -36,6 +36,7 @@ struct WorkoutLogApp: App {
                 if let preference { UserDefaults.standard.set(preference.rawValue, forKey: "weightUnit") }
             }
             #endif
+            try LibraryExercise.seedOnce(in: context)
             return (container, context)
         })
     }

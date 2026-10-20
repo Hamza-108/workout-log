@@ -12,6 +12,7 @@ struct TemplatesView: View {
     @AppStorage("weightUnit") private var unit = WeightUnit.kg.rawValue
     @State private var creating = false
     @State private var importing = false
+    @State private var exportingTemplates = false
     @State private var isVisible = false
     #if DEBUG
     @State private var testDraftLoaded = false
@@ -91,6 +92,8 @@ struct TemplatesView: View {
                 .accessibilityIdentifier("newTemplate")
             Menu {
                 Button("Import template", systemImage: "square.and.arrow.down") { importing = true }
+                Button("Export templates", systemImage: "square.and.arrow.up") { exportingTemplates = true }
+                NavigationLink("Exercise library", value: HomeDestination.library)
                 NavigationLink("Data and backups", value: HomeDestination.data)
             } label: { Label("More", systemImage: "ellipsis.circle") }
                 .accessibilityIdentifier("templateActions")
@@ -98,6 +101,7 @@ struct TemplatesView: View {
         .sheet(isPresented: $importing, onDismiss: openRequestedSession) {
             NavigationStack { TemplateImportView() }
         }
+        .sheet(isPresented: $exportingTemplates, onDismiss: openRequestedSession) { NavigationStack { TemplateExportView() } }
         .sheet(isPresented: $creating, onDismiss: openRequestedSession) { NavigationStack { TemplateEditor() } }
         .sheet(item: $editing, onDismiss: openRequestedSession) { template in NavigationStack { TemplateEditor(template: template) } }
         .fullScreenCover(item: $activeSession) { session in NavigationStack { SessionView(session: session) } }
@@ -106,10 +110,11 @@ struct TemplatesView: View {
         .onChange(of: resumeID, initial: true) { _, id in
             guard let id else { return }
             if activeSession?.id == id { resumeID = nil; return }
-            if creating || editing != nil || importing {
+            if creating || editing != nil || importing || exportingTemplates {
                 creating = false
                 editing = nil
                 importing = false
+                exportingTemplates = false
             } else { openRequestedSession() }
         }
         .confirmationDialog("Delete template?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
@@ -158,23 +163,27 @@ private struct ExerciseDraft: Identifiable {
     let id = UUID()
     var name: String
     var sets = 3
+    var video = ""
 }
 
 struct TemplateEditor: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     let template: WorkoutTemplate?
+    private let isImport: Bool
+    @State private var picking = false
     @State private var name: String
     @State private var exercises: [ExerciseDraft]
     @State private var error: String?
 
     init(template: WorkoutTemplate? = nil, draft: TemplateDraft? = nil) {
         self.template = template
+        isImport = draft != nil
         _name = State(initialValue: template?.name ?? draft?.name ?? "")
         let names = template?.exercises ?? draft?.exercises ?? [""]
         let counts = template?.setCounts ?? draft?.setCounts
         _exercises = State(initialValue: names.enumerated().map { index, name in
-            ExerciseDraft(name: name, sets: counts?[index] ?? 3)
+            ExerciseDraft(name: name, sets: counts?[index] ?? 3, video: (template?.videoURLs ?? draft?.videoURLs)?[name] ?? "")
         })
     }
 
@@ -191,16 +200,17 @@ struct TemplateEditor: View {
                             .accessibilityIdentifier("exerciseName")
                         Stepper("Sets: \(exercise.sets)", value: $exercise.sets, in: 1...99)
                             .accessibilityIdentifier("exerciseSets")
+                        VideoURLField(text: $exercise.video)
                     }
                 }
                 .onDelete { exercises.remove(atOffsets: $0) }
                 .onMove { exercises.move(fromOffsets: $0, toOffset: $1) }
-                Button("Add exercise") { exercises.append(ExerciseDraft(name: "")) }
+                Button("Add exercises", systemImage: "list.bullet") { picking = true }
                     .accessibilityIdentifier("addExercise")
             } header: {
                 Text("Exercises")
             } footer: {
-                Text("Swipe to remove an exercise. Use Reorder to change the order.")
+                Text("Swipe to remove an exercise. Use Reorder to change the order. Selected exercises are copies; edits here do not change the library.")
             }
             if let error { Section { Text(error).foregroundStyle(.red).accessibilityIdentifier("validationError") } }
         }
@@ -212,6 +222,14 @@ struct TemplateEditor: View {
                 Button("Save") { save() }.accessibilityIdentifier("saveTemplate")
             }
         }
+        .sheet(isPresented: $picking) {
+            NavigationStack {
+                ExercisePicker(excluding: Set(exercises.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })) { selected in
+                    exercises.removeAll { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                    exercises.append(contentsOf: selected.map { ExerciseDraft(name: $0.name, video: $0.videoURL ?? "") })
+                }
+            }
+        }
         .interactiveDismissDisabled()
     }
 
@@ -220,13 +238,25 @@ struct TemplateEditor: View {
             let (name, exercises) = try WorkoutTemplate.validated(name: name, exercises: exercises.map(\.name))
             let counts = self.exercises.map(\.sets)
             try WorkoutTemplate.validateSetCounts(counts, exercises: exercises)
+            var videos: [String: String] = [:]
+            for (name, fields) in zip(exercises, self.exercises) {
+                if let video = try VideoLink.normalized(fields.video) { videos[name] = video }
+            }
+            let links = videos.isEmpty ? nil : videos
+            if isImport {
+                try TemplatePack.checkLibrary([TemplateDraft(name: name, exercises: exercises, setCounts: counts, videoURLs: links)], in: context)
+            }
+            var names = Set(try context.fetch(FetchDescriptor<LibraryExercise>()).map { $0.name.lowercased() })
+            let additions = exercises.filter { names.insert($0.lowercased()).inserted }.map { LibraryExercise(name: $0, videoURL: videos[$0]) }
             try context.commit {
+                for exercise in additions { context.insert(exercise) }
                 if let template {
                     template.name = name
                     template.exercises = exercises
                     template.setCounts = counts
+                    template.videoURLs = links
                 } else {
-                    context.insert(WorkoutTemplate(name: name, exercises: exercises, setCounts: counts))
+                    context.insert(WorkoutTemplate(name: name, exercises: exercises, setCounts: counts, videoURLs: links))
                 }
             }
             dismiss()

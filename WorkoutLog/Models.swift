@@ -53,17 +53,67 @@ struct PlannedSet: Codable, Identifiable, Equatable {
 }
 
 @Model
+final class LibraryExercise {
+    var id: UUID
+    var name: String
+    var videoURL: String?
+
+    init(name: String, videoURL: String? = nil) {
+        id = UUID()
+        self.name = name
+        self.videoURL = videoURL
+    }
+
+    static func validated(name: String, videoURL: String?) throws -> (String, String?) {
+        let (name, _) = try WorkoutTemplate.validated(name: name, exercises: [name])
+        return (name, try VideoLink.normalized(videoURL))
+    }
+
+    static func checkUnique(_ name: String, excluding id: UUID? = nil, in context: ModelContext) throws {
+        let saved = try context.fetch(FetchDescriptor<LibraryExercise>())
+        guard !saved.contains(where: { $0.id != id && $0.name.lowercased() == name.lowercased() }) else {
+            throw LogError(message: "An exercise with this name is already in the library.")
+        }
+    }
+
+    static func seedOnce(in context: ModelContext) throws {
+        guard try context.fetchCount(FetchDescriptor<LibrarySetup>()) == 0 else { return }
+        let templates = try context.fetch(FetchDescriptor<WorkoutTemplate>(sortBy: [SortDescriptor(\.name)]))
+        var names = Set(try context.fetch(FetchDescriptor<LibraryExercise>()).map { $0.name.lowercased() })
+        var additions: [LibraryExercise] = []
+        for template in templates {
+            for name in template.exercises where names.insert(name.lowercased()).inserted {
+                additions.append(LibraryExercise(name: name, videoURL: template.videoURLs?[name]))
+            }
+        }
+        try context.commit {
+            for exercise in additions { context.insert(exercise) }
+            context.insert(LibrarySetup())
+        }
+    }
+}
+
+// A store-local marker prevents deleted library entries reappearing on launch.
+@Model
+final class LibrarySetup {
+    var complete: Bool
+    init() { complete = true }
+}
+
+@Model
 final class WorkoutTemplate {
     var id: UUID
     var name: String
     var exercises: [String]
     var setCounts: [Int]?
+    var videoURLs: [String: String]?
 
-    init(name: String, exercises: [String], setCounts: [Int]? = nil) {
+    init(name: String, exercises: [String], setCounts: [Int]? = nil, videoURLs: [String: String]? = nil) {
         id = UUID()
         self.name = name
         self.exercises = exercises
         self.setCounts = setCounts
+        self.videoURLs = videoURLs
     }
 
     static func validateSetCounts(_ counts: [Int]?, exercises: [String]) throws {
@@ -98,6 +148,7 @@ final class WorkoutSession {
     var unit: String
     var sets: [LoggedSet]
     var plannedSets: [PlannedSet]?
+    var videoURLs: [String: String]?
 
     init(templateName: String, exercises: [String], unit: WeightUnit) {
         id = UUID()
@@ -113,7 +164,9 @@ final class WorkoutSession {
         guard drafts.isEmpty else { throw LogError(message: "Resume or discard your current workout before starting another.") }
         let (name, exercises) = try WorkoutTemplate.validated(name: template.name, exercises: template.exercises)
         try WorkoutTemplate.validateSetCounts(template.setCounts, exercises: exercises)
+        try VideoLink.validate(template.videoURLs, exercises: exercises)
         let session = WorkoutSession(templateName: name, exercises: exercises, unit: unit)
+        session.videoURLs = template.videoURLs
         if let counts = template.setCounts {
             session.plannedSets = zip(exercises, counts).flatMap { exercise, count in
                 (0..<count).map { _ in PlannedSet(exercise: exercise) }

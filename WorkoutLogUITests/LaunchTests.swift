@@ -281,11 +281,88 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(example.label.contains("\"sets\":3"))
         XCTAssertTrue(app.buttons["chooseTemplateJSON"].exists)
         app.buttons["copyTemplateExample"].tap()
-        app.swipeUp()
+        for _ in 0..<3 where !app.staticTexts["Example copied."].isHittable { app.swipeUp() }
         XCTAssertTrue(app.staticTexts["Example copied."].waitForExistence(timeout: 10))
         app.buttons["Cancel"].tap()
         XCTAssertTrue(app.buttons["newTemplate"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["startWorkout-Push day"].exists)
+    }
+
+    func testLibraryPickerIncludesVideosAndMultipleExercises() {
+        let app = launchApp()
+        app.buttons["templateActions"].tap()
+        app.buttons["Exercise library"].tap()
+        app.buttons["newLibraryExercise"].tap()
+        enter("Bench", in: app.textFields["libraryExerciseName"])
+        app.buttons["Add video"].tap()
+        enter("https://youtu.be/abcdefghijk", in: app.textFields["exerciseVideoURL"])
+        app.buttons["saveLibraryExercise"].tap()
+        XCTAssertTrue(app.buttons["libraryExercise-Bench"].waitForExistence(timeout: 10))
+        app.buttons["newLibraryExercise"].tap()
+        enter("Row", in: app.textFields["libraryExerciseName"])
+        app.buttons["saveLibraryExercise"].tap()
+        XCTAssertTrue(app.buttons["libraryExercise-Row"].waitForExistence(timeout: 10))
+        app.navigationBars.buttons["Templates"].tap()
+        app.buttons["newTemplate"].tap()
+        enter("Monday", in: app.textFields["templateName"])
+        app.buttons["addExercise"].tap()
+        app.buttons["pickExercise-Row"].tap()
+        app.buttons["pickExercise-Bench"].tap()
+        app.buttons["addSelectedExercises"].tap()
+        let fields = app.textFields.matching(identifier: "exerciseName")
+        XCTAssertEqual(fields.element(boundBy: 0).value as? String, "Row")
+        XCTAssertEqual(fields.element(boundBy: 1).value as? String, "Bench")
+        XCTAssertEqual(app.textFields["exerciseVideoURL"].value as? String, "https://www.youtube.com/watch?v=abcdefghijk")
+        app.buttons["saveTemplate"].tap()
+        XCTAssertTrue(app.buttons["startWorkout-Monday"].waitForExistence(timeout: 10))
+        app.buttons["startWorkout-Monday"].tap()
+        let video = app.descendants(matching: .any).matching(identifier: "video-Bench").firstMatch
+        XCTAssertTrue(video.waitForExistence(timeout: 10))
+        XCTAssertEqual(video.label, "Watch Bench tutorial")
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "video-Row").firstMatch.exists)
+        app.buttons["Close"].tap()
+        app.terminate()
+        app.launch()
+        app.buttons["resumeWorkout"].tap()
+        XCTAssertTrue(video.waitForExistence(timeout: 10))
+    }
+
+    func testPlainTextBatchPreviewCancelImportAndCopyExport() {
+        let app = launchApp()
+        let json = #"{"templates":[{"name":"Monday","exercises":[{"name":"Bench","sets":3}]},{"name":"Tuesday","exercises":[{"name":"Row","sets":2}]}]}"#
+        for shouldSave in [false, true] {
+            app.buttons["templateActions"].tap()
+            app.buttons["Import template"].tap()
+            let input = app.textViews["templateJSONInput"]
+            enter(json, in: input)
+            if app.buttons["Done"].firstMatch.exists { app.buttons["Done"].firstMatch.tap() }
+            app.buttons["reviewTemplateJSON"].tap()
+            XCTAssertTrue(app.buttons["importAllTemplates"].waitForExistence(timeout: 10))
+            if shouldSave { app.buttons["importAllTemplates"].tap() }
+            else {
+                app.buttons["Back"].tap()
+                XCTAssertEqual(input.value as? String, json)
+                app.buttons["Cancel"].tap()
+                XCTAssertFalse(app.buttons["startWorkout-Monday"].exists)
+            }
+        }
+        XCTAssertTrue(app.buttons["startWorkout-Monday"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["startWorkout-Tuesday"].exists)
+        app.buttons["templateActions"].tap()
+        app.buttons["Export templates"].tap()
+        app.buttons["Deselect all"].tap()
+        XCTAssertFalse(app.buttons["copyTemplateJSON"].isEnabled)
+        app.buttons["exportTemplate-Tuesday"].tap()
+        app.buttons["copyTemplateJSON"].tap()
+        XCTAssertTrue(app.staticTexts["Template JSON copied."].waitForExistence(timeout: 10))
+        app.buttons["Close"].tap()
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["startWorkout-Tuesday"].waitForExistence(timeout: 10))
+        app.buttons["templateActions"].tap()
+        app.buttons["Exercise library"].tap()
+        XCTAssertTrue(app.buttons["libraryExercise-Bench"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["libraryExercise-Row"].exists)
     }
 
     func testDataScreenIsAccessible() {
