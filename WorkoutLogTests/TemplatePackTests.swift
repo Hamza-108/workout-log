@@ -275,9 +275,54 @@ final class TemplatePackTests: XCTestCase {
             let container = try store()
             try DataTransfer.apply(backup, in: container.mainContext)
             XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<WorkoutTemplate>()), 1)
-            XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<LibraryExercise>()), 0)
+            XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<LibraryExercise>()), 1)
             XCTAssertEqual(try container.mainContext.fetchCount(FetchDescriptor<WorkoutSession>()), 0)
         }
+    }
+
+    func testOptionalVideoOmissionDoesNotConflictOrDiscardAnExplicitLink() throws {
+        let json = """
+        {"templates":[
+          {"name":"Monday","exercises":[{"name":"Bench","sets":3}]},
+          {"name":"Friday","exercises":[{"name":"Bench","sets":5,"videoURL":"https://youtu.be/\(videoID)"}]}
+        ]}
+        """
+        let drafts = try TemplatePack.decode(Data(json.utf8))
+        let db = try store()
+        try TemplatePack.apply(drafts, in: db.mainContext)
+        let library = try XCTUnwrap(db.mainContext.fetch(FetchDescriptor<LibraryExercise>()).first)
+        XCTAssertEqual(library.videoURL, canonical)
+        let templates = try db.mainContext.fetch(FetchDescriptor<WorkoutTemplate>(sortBy: [SortDescriptor(\.name)]))
+        XCTAssertNil(templates.first { $0.name == "Monday" }?.videoURLs)
+        XCTAssertEqual(templates.first { $0.name == "Friday" }?.videoURLs?["Bench"], canonical)
+        try TemplatePack.apply(drafts, in: db.mainContext)
+        XCTAssertEqual(try db.mainContext.fetchCount(FetchDescriptor<LibraryExercise>()), 1)
+    }
+
+    func testExportsPreserveDifferentTemplateVideoSnapshots() throws {
+        let first = TemplateDraft(name: "Monday", exercises: ["Bench"], setCounts: [3], videoURLs: ["Bench": canonical])
+        let second = TemplateDraft(name: "Friday", exercises: ["Bench"], setCounts: [5], videoURLs: ["Bench": otherCanonical])
+        let exported = try TemplatePack.encode([first, second])
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: exported) as? [String: Any])
+        let templates = try XCTUnwrap(object["templates"] as? [[String: Any]])
+        XCTAssertEqual(templates.count, 2)
+        // Export must not discard variants; importing requires resolving explicit definition conflicts.
+        XCTAssertThrowsError(try TemplatePack.decode(exported))
+    }
+
+    func testBackupReusesIdenticalLibraryDefinitionsWithDifferentIDs() throws {
+        let source = try store(), target = try store()
+        try source.mainContext.commit { source.mainContext.insert(LibraryExercise(name: "Bench", videoURL: canonical)) }
+        let existing = LibraryExercise(name: "Bench", videoURL: canonical)
+        try target.mainContext.commit { target.mainContext.insert(existing) }
+        let backup = try DataTransfer.snapshot(in: source.mainContext, unit: .kg)
+        let (preview, _) = try DataTransfer.apply(backup, in: target.mainContext)
+        XCTAssertEqual(preview.libraryExercises.count, 0)
+        XCTAssertEqual(preview.skippedExercises, 1)
+        XCTAssertEqual(try target.mainContext.fetchCount(FetchDescriptor<LibraryExercise>()), 1)
+        XCTAssertEqual(try target.mainContext.fetch(FetchDescriptor<LibraryExercise>()).first?.id, existing.id)
+        try target.mainContext.commit { existing.videoURL = otherCanonical }
+        XCTAssertThrowsError(try DataTransfer.apply(backup, in: target.mainContext))
     }
 
     func testFailedPackSaveLeavesTheSavedFileUnchanged() throws {

@@ -62,9 +62,9 @@ Whole-plan format (replace the placeholder video ID with yours, or omit `videoUR
 
 `name` is the template name; `exercises` is ordered. Each exercise needs a non-empty `name`, an integer `sets` from 1 to 99 and optionally `videoURL`. The old `"exercises":["Bench press","Overhead press"]` format still works with 3 sets each. Both text and files have a 25 MiB UTF-8 limit. Empty names, duplicate exercises within a template, invalid links and conflicting video definitions for the same library exercise are rejected before saving.
 
-Imports create new templates; they never overwrite existing ones. The batch preview warns about repeated template names: importing again can create copies. Matching exercise-library definitions are reused; conflicting links require editing the JSON or library entry before retrying. Monday/Tuesday are names, not scheduled calendar events.
+Imports create new templates; they never overwrite existing ones. The batch preview warns about repeated template names: importing again can create copies. Matching exercise-library definitions are reused; omitting a video keeps that template unlinked without clearing the library video. Conflicting explicit links require editing the JSON or library entry before retrying. Monday/Tuesday are names, not scheduled calendar events.
 
-**More (…) → Export templates** selects some/all templates, then **Save JSON file** or **Copy JSON**. Exports contain names, exercise order, counts and videos—not history, database IDs or app-identifying metadata. Legacy name-only templates export with 3 sets per exercise. For an exact data-preserving copy including legacy metadata, use a full backup instead.
+**More (…) → Export templates** selects some/all templates, then **Save JSON file** or **Copy JSON**. Exports contain names, exercise order, counts and videos—not history, database IDs or app-identifying metadata. Legacy name-only templates export with 3 sets per exercise. Exports preserve template-specific video variants; if explicit links for one exercise disagree, resolve them before importing that pack. For an exact data-preserving copy including legacy metadata, use a full backup instead.
 
 ## Backups
 
@@ -85,7 +85,7 @@ Export your current data before resolving conflicting copies. Keep the original 
 {"schemaVersion":3,"preferredWeightUnit":"kg","templates":[],"sessions":[]}
 ```
 
-The app still imports version 1 and 2 backups. Version 1 does not invent planned sets. New exports use version 3; older app versions cannot read them. Full backups include unused library exercises as well as template/session video snapshots. Updating adds library tables and optional video metadata without rewriting existing logged sets. Upgrade/reopen regression tests check both previous stored-field layouts.
+The app still imports version 1 and 2 backups. Version 1 does not invent planned sets. New exports use version 3; older app versions cannot read them. Full backups include unused library exercises as well as template/session video snapshots. Restoring older backups also makes their template exercises available in the library. Identical library definitions with different IDs are reused by name during a merge; conflicting videos stop the import. Updating adds library tables and optional video metadata without rewriting existing logged sets. Upgrade/reopen regression tests check both previous stored-field layouts.
 
 - Optional `libraryExercises`: records with `id`, `name` and optional `videoURL`. Library IDs and case-insensitive names must be unique. The store-local setup marker is not exported.
 - Template fields: `id` (UUID), `name`, ordered `exercises`, optional `setCounts` (one count per exercise, in the same order), optional `videoURLs` mapping exact exercise names to canonical YouTube links.

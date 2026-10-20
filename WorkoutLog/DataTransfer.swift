@@ -69,19 +69,25 @@ enum TemplatePack {
             return TemplateDraft(name: name, exercises: exercises, setCounts: counts, videoURLs: videos.isEmpty ? nil : videos)
         }
         try validate(drafts)
+        try validateDefinitions(drafts)
         return drafts
     }
 
     static func validate(_ drafts: [TemplateDraft]) throws {
         guard !drafts.isEmpty else { throw LogError(message: "Select at least one template.") }
-        var definitions: [String: String] = [:]
         for draft in drafts {
             let (name, exercises) = try WorkoutTemplate.validated(name: draft.name, exercises: draft.exercises)
             guard name == draft.name, exercises == draft.exercises else { throw LogError(message: "Trim template and exercise names before importing.") }
             try WorkoutTemplate.validateSetCounts(draft.setCounts, exercises: exercises)
             try VideoLink.validate(draft.videoURLs, exercises: exercises)
-            for exercise in exercises {
-                let key = exercise.lowercased(), video = draft.videoURLs?[exercise] ?? ""
+        }
+    }
+
+    private static func validateDefinitions(_ drafts: [TemplateDraft]) throws {
+        var definitions: [String: String] = [:]
+        for draft in drafts {
+            for (exercise, video) in draft.videoURLs ?? [:] {
+                let key = exercise.lowercased()
                 if let previous = definitions[key], previous != video {
                     throw LogError(message: "Conflicting video links for \(exercise). Use one definition before importing.")
                 }
@@ -111,11 +117,12 @@ enum TemplatePack {
 
     static func checkLibrary(_ drafts: [TemplateDraft], in context: ModelContext) throws {
         try validate(drafts)
+        try validateDefinitions(drafts)
         let library = try context.fetch(FetchDescriptor<LibraryExercise>())
         for draft in drafts {
             for name in draft.exercises {
                 if let saved = library.first(where: { $0.name.lowercased() == name.lowercased() }),
-                   saved.videoURL != draft.videoURLs?[name] {
+                   let incoming = draft.videoURLs?[name], saved.videoURL != incoming {
                     throw LogError(message: "The library already has a different video for \(name). Edit the JSON or library entry before importing. Nothing was imported.")
                 }
             }
@@ -128,7 +135,10 @@ enum TemplatePack {
         var additions: [LibraryExercise] = []
         for draft in drafts {
             for name in draft.exercises where names.insert(name.lowercased()).inserted {
-                additions.append(LibraryExercise(name: name, videoURL: draft.videoURLs?[name]))
+                let video = drafts.compactMap { candidate in
+                    candidate.videoURLs?.first { $0.key.lowercased() == name.lowercased() }?.value
+                }.first
+                additions.append(LibraryExercise(name: name, videoURL: video))
             }
         }
         let templates = drafts.map { WorkoutTemplate(name: $0.name, exercises: $0.exercises, setCounts: $0.setCounts, videoURLs: $0.videoURLs) }
@@ -370,10 +380,24 @@ enum DataTransfer {
         let existing = try snapshot(in: context, unit: .kg)
         let templates = try additions(backup.templates, existing: existing.templates)
         let sessions = try additions(backup.sessions, existing: existing.sessions)
-        let exercises = try additions(backup.libraryExercises ?? [], existing: existing.libraryExercises ?? [])
-        let combined = (existing.libraryExercises ?? []) + exercises
-        guard Set(combined.map { $0.name.lowercased() }).count == combined.count else {
-            throw LogError(message: "A different library exercise already uses an imported name. No records were imported.")
+        var incomingLibrary = backup.libraryExercises ?? []
+        if backup.schemaVersion < 3 {
+            var names: Set<String> = []
+            for template in backup.templates {
+                for name in template.exercises where names.insert(name.lowercased()).inserted {
+                    incomingLibrary.append(Exercise(LibraryExercise(name: name)))
+                }
+            }
+        }
+        let candidates = try additions(incomingLibrary, existing: existing.libraryExercises ?? [])
+        let savedNames = Dictionary(uniqueKeysWithValues: (existing.libraryExercises ?? []).map { ($0.name.lowercased(), $0) })
+        var exercises: [Exercise] = []
+        for exercise in candidates {
+            if let saved = savedNames[exercise.name.lowercased()] {
+                guard backup.schemaVersion < 3 || saved.videoURL == exercise.videoURL else {
+                    throw LogError(message: "A library exercise already has a different video. No records were imported.")
+                }
+            } else { exercises.append(exercise) }
         }
         guard (existing.sessions + sessions).filter({ $0.finishedAt == nil }).count <= 1 else {
             throw LogError(message: "Finish or discard your current workout before importing a different unfinished workout.")
@@ -382,7 +406,7 @@ enum DataTransfer {
                        skippedTemplates: backup.templates.count - templates.count,
                        skippedSessions: backup.sessions.count - sessions.count,
                        restorePreference: existing.templates.isEmpty && existing.sessions.isEmpty && (existing.libraryExercises ?? []).isEmpty,
-                       libraryExercises: exercises, skippedExercises: (backup.libraryExercises ?? []).count - exercises.count)
+                       libraryExercises: exercises, skippedExercises: incomingLibrary.count - exercises.count)
     }
 
     @discardableResult
