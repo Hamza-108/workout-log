@@ -58,13 +58,16 @@ extension TemplatePack {
         let video: String
     }
 
-    private static func librarySnapshot(_ entries: [LibraryExercise]) -> [DataTransfer.Exercise] {
-        entries.map(DataTransfer.Exercise.init).sorted { $0.id.uuidString < $1.id.uuidString }
+    private static func librarySnapshot(_ entries: [LibraryExercise]) throws -> [DataTransfer.Exercise] {
+        guard Set(entries.map { $0.name.lowercased() }).count == entries.count else {
+            throw LogError(message: "The library contains duplicate exercise names. Rename or remove the duplicate entries before importing. Nothing was imported.")
+        }
+        return entries.map(DataTransfer.Exercise.init).sorted { $0.id.uuidString < $1.id.uuidString }
     }
 
     static func review(_ drafts: [TemplateDraft], in context: ModelContext) throws -> Review {
         try validate(drafts)
-        let library = librarySnapshot(try context.fetch(FetchDescriptor<LibraryExercise>()))
+        let library = try librarySnapshot(context.fetch(FetchDescriptor<LibraryExercise>()))
         let saved = Dictionary(uniqueKeysWithValues: library.map { ($0.name.lowercased(), Definition(name: $0.name, videoURL: $0.videoURL)) })
         var bases: [String: Definition] = [:]
         for draft in drafts {
@@ -152,7 +155,7 @@ extension TemplatePack {
 
     static func apply(_ review: Review, choices: [Int: Choice], in context: ModelContext) throws {
         let entries = try context.fetch(FetchDescriptor<LibraryExercise>())
-        guard librarySnapshot(entries) == review.library else {
+        guard try librarySnapshot(entries) == review.library else {
             throw LogError(message: "The exercise library changed after this comparison. Refresh comparisons and choose again. Nothing was imported.")
         }
         let result = try resolve(review, choices: choices)

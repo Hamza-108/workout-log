@@ -216,7 +216,7 @@ private struct TemplateImportComparison: View {
         } header: {
             Text(conflict.incoming.name).textCase(nil)
         } footer: {
-            Text("Reject uses the saved version in new templates. Override changes the library for future selections, not old templates/workouts. Keep both creates a unique variation name, shown in the preview below. Only one version can override a given entry.")
+            Text("Reject uses the saved version in new templates. Override changes the library for future selections, not old templates/workouts. Keep both creates a unique variation name. The preview shows final names once every difference is resolved. Only one version can override a given entry.")
         }
     }
 

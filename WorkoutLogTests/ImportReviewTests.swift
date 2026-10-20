@@ -566,6 +566,21 @@ final class ImportReviewTests: XCTestCase {
 
     // MARK: - Incomplete answers and cancellations
 
+    func testDuplicateSavedNamesProduceAnErrorInsteadOfCrashing() throws {
+        let container = try store()
+        let context = container.mainContext
+        try context.commit {
+            context.insert(LibraryExercise(name: "Bench"))
+            context.insert(LibraryExercise(name: "BENCH"))
+        }
+        let draft = TemplateDraft(name: "Push", exercises: ["Bench"], setCounts: [3])
+        XCTAssertThrowsError(try TemplatePack.review([draft], in: context)) { error in
+            XCTAssertTrue(reviewMessage(error).contains("duplicate exercise names"))
+        }
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<LibraryExercise>()), 2)
+        XCTAssertEqual(try context.fetchCount(FetchDescriptor<WorkoutTemplate>()), 0)
+    }
+
     func testMissingChoiceIsRejectedAndNothingIsImported() throws {
         let container = try store()
         let context = container.mainContext
