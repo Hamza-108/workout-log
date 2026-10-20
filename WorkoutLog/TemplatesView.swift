@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct TemplatesView: View {
     @Environment(\.modelContext) private var context
@@ -7,6 +8,9 @@ struct TemplatesView: View {
     @Query(filter: #Predicate<WorkoutSession> { $0.finishedAt == nil }, sort: \WorkoutSession.startedAt) private var drafts: [WorkoutSession]
     @AppStorage("weightUnit") private var unit = WeightUnit.kg.rawValue
     @State private var creating = false
+    @State private var importing = false
+    @State private var readingTemplate = false
+    @State private var importedDraft: TemplateDraft?
     @State private var editing: WorkoutTemplate?
     @State private var deleting: WorkoutTemplate?
     @State private var activeSession: WorkoutSession?
@@ -14,6 +18,7 @@ struct TemplatesView: View {
 
     var body: some View {
         List {
+            if readingTemplate { ProgressView("Reading template…") }
             if let draft = drafts.first {
                 Section("In progress") {
                     Button {
@@ -66,7 +71,29 @@ struct TemplatesView: View {
         .toolbar {
             Button { creating = true } label: { Label("New template", systemImage: "plus") }
                 .accessibilityIdentifier("newTemplate")
+            Menu {
+                Button("Import template", systemImage: "square.and.arrow.down") { importing = true }
+                    .disabled(readingTemplate)
+                NavigationLink("Data and backups") { DataTransferView() }
+            } label: { Label("More", systemImage: "ellipsis.circle") }
+                .accessibilityIdentifier("templateActions")
         }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+            switch result {
+            case .success(let url):
+                readingTemplate = true
+                Task {
+                    defer { readingTemplate = false }
+                    do {
+                        importedDraft = try await Task.detached(priority: .userInitiated) {
+                            try TemplateDraft.decode(DataTransfer.read(url))
+                        }.value
+                    } catch { self.error = error.localizedDescription }
+                }
+            case .failure(let error): self.error = error.localizedDescription
+            }
+        }
+        .sheet(item: $importedDraft) { draft in NavigationStack { TemplateEditor(draft: draft) } }
         .sheet(isPresented: $creating) { NavigationStack { TemplateEditor() } }
         .sheet(item: $editing) { template in NavigationStack { TemplateEditor(template: template) } }
         .fullScreenCover(item: $activeSession) { session in NavigationStack { SessionView(session: session) } }
@@ -80,7 +107,7 @@ struct TemplatesView: View {
         } message: {
             Text("Saved workouts and your current workout will not be changed.")
         }
-        .alert("Could not save", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
+        .alert("Could not complete action", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
     }
@@ -107,10 +134,10 @@ struct TemplateEditor: View {
     @State private var exercises: [ExerciseDraft]
     @State private var error: String?
 
-    init(template: WorkoutTemplate? = nil) {
+    init(template: WorkoutTemplate? = nil, draft: TemplateDraft? = nil) {
         self.template = template
-        _name = State(initialValue: template?.name ?? "")
-        _exercises = State(initialValue: (template?.exercises ?? [""]).map { ExerciseDraft(name: $0) })
+        _name = State(initialValue: template?.name ?? draft?.name ?? "")
+        _exercises = State(initialValue: (template?.exercises ?? draft?.exercises ?? [""]).map { ExerciseDraft(name: $0) })
     }
 
     var body: some View {
