@@ -13,7 +13,6 @@ struct TemplatesView: View {
     @State private var creating = false
     @State private var importing = false
     @State private var isVisible = false
-    @State private var importedDraft: TemplateDraft?
     #if DEBUG
     @State private var testDraftLoaded = false
     #endif
@@ -81,10 +80,9 @@ struct TemplatesView: View {
             #if DEBUG
             if !testDraftLoaded,
                let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"], UUID(uuidString: testID) != nil,
-               let fixture = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_TEMPLATE"] {
+               ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_TEMPLATE"] != nil {
                 testDraftLoaded = true
-                do { importedDraft = try TemplateDraft.decode(Data(fixture.utf8)); importing = true }
-                catch { self.error = error.localizedDescription }
+                importing = true
             }
             #endif
         }
@@ -92,13 +90,13 @@ struct TemplatesView: View {
             Button { creating = true } label: { Label("New template", systemImage: "plus") }
                 .accessibilityIdentifier("newTemplate")
             Menu {
-                Button("Import template", systemImage: "square.and.arrow.down") { importedDraft = nil; importing = true }
+                Button("Import template", systemImage: "square.and.arrow.down") { importing = true }
                 NavigationLink("Data and backups", value: HomeDestination.data)
             } label: { Label("More", systemImage: "ellipsis.circle") }
                 .accessibilityIdentifier("templateActions")
         }
-        .sheet(isPresented: $importing, onDismiss: { importedDraft = nil; openRequestedSession() }) {
-            NavigationStack { TemplateImportView(draft: importedDraft) }
+        .sheet(isPresented: $importing, onDismiss: openRequestedSession) {
+            NavigationStack { TemplateImportView() }
         }
         .sheet(isPresented: $creating, onDismiss: openRequestedSession) { NavigationStack { TemplateEditor() } }
         .sheet(item: $editing, onDismiss: openRequestedSession) { template in NavigationStack { TemplateEditor(template: template) } }

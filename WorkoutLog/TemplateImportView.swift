@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 struct TemplateImportView: View {
     @Environment(\.dismiss) private var dismiss
-    @State var draft: TemplateDraft?
+    @State private var draft: TemplateDraft?
     @State private var choosingFile = false
     @State private var busy = false
     @State private var message: String?
@@ -41,6 +41,15 @@ struct TemplateImportView: View {
                     ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 }
             }
+        }
+        .task {
+            #if DEBUG
+            if let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"], UUID(uuidString: testID) != nil,
+               let fixture = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_TEMPLATE"] {
+                do { draft = try TemplateDraft.decode(Data(fixture.utf8)) }
+                catch { message = error.localizedDescription }
+            }
+            #endif
         }
         .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.json]) { result in
             switch result {

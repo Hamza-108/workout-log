@@ -167,7 +167,7 @@ final class LaunchTests: XCTestCase {
     func testImportedTemplateEditorCancelAndSave() {
         let fixture = #"{"name":"Imported Push","exercises":["Bench","Press"]}"#
         let app = launchApp(template: fixture)
-        XCTAssertTrue(app.textFields["templateName"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields["templateName"].waitForExistence(timeout: 10), app.debugDescription)
         XCTAssertEqual(app.textFields["templateName"].value as? String, "Imported Push")
         let exercises = app.textFields.matching(identifier: "exerciseName")
         XCTAssertEqual(exercises.element(boundBy: 0).value as? String, "Bench")
