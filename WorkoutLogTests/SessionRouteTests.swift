@@ -35,6 +35,14 @@ final class SessionRouteTests: XCTestCase {
         XCTAssertTrue(WorkoutActivityController.needsStart(sessionID: id, activeIDs: [], enabled: true))
     }
 
+    func testExpiredAndUnrelatedActivitiesAreCleanedUp() {
+        let id = UUID()
+        XCTAssertFalse(WorkoutActivityController.needsEnd(sessionID: id, activeID: id, isOngoing: true))
+        XCTAssertTrue(WorkoutActivityController.needsEnd(sessionID: id, activeID: id, isOngoing: false))
+        XCTAssertTrue(WorkoutActivityController.needsEnd(sessionID: UUID(), activeID: id, isOngoing: true))
+        XCTAssertTrue(WorkoutActivityController.needsEnd(sessionID: id, activeID: nil, isOngoing: true))
+    }
+
     func testActivityOnlyCarriesSessionID() throws {
         let id = UUID()
         let data = try JSONEncoder().encode(SessionActivityAttributes(sessionID: id))

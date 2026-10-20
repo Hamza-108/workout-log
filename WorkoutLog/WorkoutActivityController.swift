@@ -11,7 +11,12 @@ final class WorkoutActivityController {
         enabled && !activeIDs.contains(sessionID)
     }
 
+    static func needsEnd(sessionID: UUID, activeID: UUID?, isOngoing: Bool) -> Bool {
+        sessionID != activeID || !isOngoing
+    }
+
     func resume(_ sessionID: UUID) {
+        reconcile(activeID: sessionID)
         let enabled = ActivityAuthorizationInfo().areActivitiesEnabled
         let activeIDs = Set(Activity<SessionActivityAttributes>.activities.filter {
             $0.activityState == .active || $0.activityState == .stale
@@ -37,7 +42,10 @@ final class WorkoutActivityController {
 
     func reconcile(activeID: UUID?) {
         // Capture now, so delayed cleanup cannot end a newly started session's activity.
-        endActivities(Activity<SessionActivityAttributes>.activities.filter { $0.attributes.sessionID != activeID })
+        endActivities(Activity<SessionActivityAttributes>.activities.filter {
+            Self.needsEnd(sessionID: $0.attributes.sessionID, activeID: activeID,
+                          isOngoing: $0.activityState == .active || $0.activityState == .stale)
+        })
     }
 
     private func endActivities(_ activities: [Activity<SessionActivityAttributes>]) {
