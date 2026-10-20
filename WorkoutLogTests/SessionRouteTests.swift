@@ -3,6 +3,14 @@ import XCTest
 
 @MainActor
 final class SessionRouteTests: XCTestCase {
+    func testHostAppDeclaresSceneLifecycleAndURLScheme() throws {
+        let info = try XCTUnwrap(Bundle.main.infoDictionary)
+        let manifest = try XCTUnwrap(info["UIApplicationSceneManifest"] as? [String: Any])
+        XCTAssertNotNil(manifest["UISceneConfigurations"])
+        let types = try XCTUnwrap(info["CFBundleURLTypes"] as? [[String: Any]])
+        XCTAssertEqual(types.first?["CFBundleURLSchemes"] as? [String], ["workoutlog"])
+    }
+
     func testSessionURLRoundTrip() throws {
         let id = UUID()
         let url = try XCTUnwrap(SessionRoute.url(for: id))

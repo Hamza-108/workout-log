@@ -13,6 +13,7 @@ struct TemplatesView: View {
     @State private var creating = false
     @State private var importing = false
     @State private var readingTemplate = false
+    @State private var isVisible = false
     @State private var importedDraft: TemplateDraft?
     #if DEBUG
     @State private var testDraftLoaded = false
@@ -93,7 +94,7 @@ struct TemplatesView: View {
             Menu {
                 Button("Import template", systemImage: "square.and.arrow.down") { importing = true }
                     .disabled(readingTemplate)
-                NavigationLink("Data and backups") { DataTransferView() }
+                NavigationLink("Data and backups", value: HomeDestination.data)
             } label: { Label("More", systemImage: "ellipsis.circle") }
                 .accessibilityIdentifier("templateActions")
         }
@@ -116,8 +117,11 @@ struct TemplatesView: View {
         .sheet(isPresented: $creating, onDismiss: openRequestedSession) { NavigationStack { TemplateEditor() } }
         .sheet(item: $editing, onDismiss: openRequestedSession) { template in NavigationStack { TemplateEditor(template: template) } }
         .fullScreenCover(item: $activeSession) { session in NavigationStack { SessionView(session: session) } }
+        .onAppear { isVisible = true; openRequestedSession() }
+        .onDisappear { isVisible = false }
         .onChange(of: resumeID, initial: true) { _, id in
-            guard id != nil else { return }
+            guard let id else { return }
+            if activeSession?.id == id { resumeID = nil; return }
             if creating || editing != nil || importedDraft != nil {
                 creating = false
                 editing = nil
@@ -145,7 +149,7 @@ struct TemplatesView: View {
     }
 
     private func openRequestedSession() {
-        guard let id = resumeID else { return }
+        guard isVisible, let id = resumeID else { return }
         resumeID = nil
         do {
             guard let session = try context.fetch(FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.finishedAt == nil })).first(where: { $0.id == id }) else {
