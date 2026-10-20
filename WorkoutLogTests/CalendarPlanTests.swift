@@ -136,7 +136,7 @@ final class CalendarPlanTests: XCTestCase {
         XCTAssertEqual(april.timeIntervalSince(march), 743 * 3600)
         let november = try XCTUnwrap(newYork.date(from: DateComponents(year: 2024, month: 11, day: 1, hour: 0)))
         let december = try XCTUnwrap(newYork.date(from: DateComponents(year: 2024, month: 12, day: 1, hour: 0)))
-        XCTAssertEqual(december.timeIntervalSince(november), 719 * 3600)
+        XCTAssertEqual(december.timeIntervalSince(november), 721 * 3600)
     }
 
     func testDayKeysSurviveZonesWhereMidnightIsSkipped() throws {
