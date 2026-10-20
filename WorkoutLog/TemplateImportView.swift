@@ -69,7 +69,17 @@ struct TemplateImportView: View {
                     enteringText = false
                     do {
                         try DataTransfer.checkSize(text.utf8.count)
-                        load(Data(text.utf8))
+                        let data = Data(text.utf8)
+                        busy = true
+                        Task {
+                            defer { busy = false }
+                            do {
+                                let decoded = try await Task.detached(priority: .userInitiated) { try TemplatePack.decode(data) }.value
+                                try TemplatePack.checkLibrary(decoded, in: context)
+                                drafts = decoded
+                                message = nil
+                            } catch { message = error.localizedDescription }
+                        }
                     } catch { message = error.localizedDescription }
                 }
                 .disabled(busy || text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)

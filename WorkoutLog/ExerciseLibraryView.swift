@@ -53,7 +53,7 @@ struct ExerciseLibraryView: View {
             Button("Delete exercise", role: .destructive) {
                 guard let deleting else { return }
                 do { try context.commit { context.delete(deleting) } }
-                catch { error = error.localizedDescription }
+                catch { self.error = error.localizedDescription }
                 self.deleting = nil
             }
         } message: { Text("Existing templates and saved workouts keep their own copies.") }
