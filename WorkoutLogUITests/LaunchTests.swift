@@ -287,7 +287,7 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(example.label.contains("\"sets\":3"))
         XCTAssertTrue(app.buttons["chooseTemplateJSON"].exists)
         app.buttons["copyTemplateExample"].tap()
-        for _ in 0..<3 where !app.staticTexts["Example copied."].isHittable { app.swipeUp() }
+        for _ in 0..<3 where !app.staticTexts["Example copied."].isHittable { app.swipeDown() }
         XCTAssertTrue(app.staticTexts["Example copied."].waitForExistence(timeout: 10))
         app.buttons["Cancel"].tap()
         XCTAssertTrue(app.buttons["newTemplate"].waitForExistence(timeout: 10))
@@ -369,6 +369,92 @@ final class LaunchTests: XCTestCase {
         app.buttons["Exercise library"].tap()
         XCTAssertTrue(app.buttons["libraryExercise-Bench"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["libraryExercise-Row"].exists)
+    }
+
+    func testImportConflictRejectOverrideAndKeepBoth() {
+        let backup = #"{"schemaVersion":3,"preferredWeightUnit":"kg","templates":[],"sessions":[],"libraryExercises":[{"id":"11111111-1111-4111-8111-111111111111","name":"Bench","videoURL":"https://www.youtube.com/watch?v=abcdefghijk"}]}"#
+        let incoming = #"{"name":"Push","exercises":[{"name":"Bench","sets":3,"videoURL":"https://youtu.be/abcdefghijk?t=90s"}]}"#
+        for choice in ["reject", "replace", "keepBoth"] {
+            let app = launchApp(backup: backup, template: incoming)
+            XCTAssertTrue(app.buttons["saveTemplate"].waitForExistence(timeout: 10))
+            app.buttons["saveTemplate"].tap()
+            XCTAssertTrue(app.staticTexts["importConflictSummary"].waitForExistence(timeout: 10))
+            XCTAssertFalse(app.buttons["importAllTemplates"].isEnabled)
+            XCTAssertTrue(app.staticTexts["https://www.youtube.com/watch?v=abcdefghijk"].exists)
+            XCTAssertTrue(app.staticTexts["https://www.youtube.com/watch?v=abcdefghijk&t=90"].exists)
+            let option = app.buttons["conflictChoice-0-\(choice)"]
+            for _ in 0..<3 where !option.isHittable { app.swipeUp() }
+            option.tap()
+            XCTAssertTrue(app.buttons["importAllTemplates"].isEnabled)
+            app.buttons["importAllTemplates"].tap()
+            XCTAssertTrue(app.buttons["startWorkout-Push"].waitForExistence(timeout: 10))
+            app.buttons["Edit Push"].tap()
+            let expectedName = choice == "keepBoth" ? "Bench (variation 1)" : "Bench"
+            XCTAssertEqual(app.textFields.matching(identifier: "exerciseName").firstMatch.value as? String, expectedName)
+            let expectedVideo = "https://www.youtube.com/watch?v=abcdefghijk" + (choice == "reject" ? "" : "&t=90")
+            XCTAssertEqual(app.textFields["exerciseVideoURL"].value as? String, expectedVideo)
+            app.buttons["Cancel"].tap()
+            app.buttons["templateActions"].tap()
+            app.buttons["Exercise library"].tap()
+            XCTAssertTrue(app.buttons["libraryExercise-Bench"].waitForExistence(timeout: 10))
+            XCTAssertEqual(app.buttons["libraryExercise-Bench (variation 1)"].exists, choice == "keepBoth")
+            app.buttons["libraryExercise-Bench"].tap()
+            XCTAssertEqual(app.textFields["exerciseVideoURL"].value as? String,
+                           "https://www.youtube.com/watch?v=abcdefghijk" + (choice == "replace" ? "&t=90" : ""))
+            app.buttons["Cancel"].tap()
+            app.terminate()
+        }
+    }
+
+    func testImportErrorAlertPreservesTextAndConflictCancelSavesNothing() {
+        let app = launchApp()
+        app.buttons["templateActions"].tap()
+        app.buttons["Import template"].tap()
+        let input = app.textViews["templateJSONInput"]
+        enter("{broken", in: input)
+        if app.buttons["Done"].firstMatch.exists { app.buttons["Done"].firstMatch.tap() }
+        app.buttons["reviewTemplateJSON"].tap()
+        XCTAssertTrue(app.alerts["Could not import"].waitForExistence(timeout: 10))
+        app.alerts.buttons["OK"].tap()
+        XCTAssertEqual(input.value as? String, "{broken")
+        XCTAssertTrue(app.staticTexts["templateImportStatus"].exists)
+        app.buttons["Cancel"].tap()
+        app.terminate()
+
+        let variants = #"{"templates":[{"name":"Monday","exercises":[{"name":"Bench","sets":3,"videoURL":"https://youtu.be/abcdefghijk"}]},{"name":"Friday","exercises":[{"name":"Bench","sets":2,"videoURL":"https://youtu.be/abcdefghijk?t=90"}]}]}"#
+        let fresh = launchApp(template: variants)
+        XCTAssertTrue(fresh.staticTexts["importConflictSummary"].waitForExistence(timeout: 10))
+        fresh.buttons["cancelTemplateImport"].tap()
+        XCTAssertTrue(fresh.buttons["newTemplate"].waitForExistence(timeout: 10))
+        XCTAssertFalse(fresh.buttons["startWorkout-Monday"].exists)
+        fresh.buttons["templateActions"].tap()
+        fresh.buttons["Exercise library"].tap()
+        XCTAssertFalse(fresh.buttons["libraryExercise-Bench"].exists)
+    }
+
+    func testClearLibraryCancelConfirmAndReopenPreservesSavedWork() {
+        let app = launchApp(backup: backupFixture)
+        app.buttons["templateActions"].tap()
+        app.buttons["Exercise library"].tap()
+        XCTAssertTrue(app.buttons["libraryExercise-Bench"].waitForExistence(timeout: 10))
+        app.buttons["libraryActions"].tap()
+        app.buttons["clearLibrary"].tap()
+        XCTAssertTrue(app.buttons["confirmClearLibrary"].waitForExistence(timeout: 10))
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["libraryExercise-Bench"].exists)
+        app.buttons["libraryActions"].tap()
+        app.buttons["clearLibrary"].tap()
+        app.buttons["confirmClearLibrary"].tap()
+        XCTAssertFalse(app.buttons["libraryExercise-Bench"].exists)
+        app.terminate()
+        app.launch()
+        XCTAssertTrue(app.buttons["resumeWorkout"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["History"].tap()
+        XCTAssertTrue(app.buttons["history-Old Push"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["Templates"].tap()
+        app.buttons["templateActions"].tap()
+        app.buttons["Exercise library"].tap()
+        XCTAssertFalse(app.buttons["libraryExercise-Bench"].exists)
     }
 
     func testCalendarWalkingRepeatOverrideCompletionAndReopen() {

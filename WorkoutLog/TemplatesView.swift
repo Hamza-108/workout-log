@@ -170,15 +170,17 @@ struct TemplateEditor: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     let template: WorkoutTemplate?
-    private let isImport: Bool
+    private let onImport: ((TemplateDraft) -> Void)?
+    private let onCancel: (() -> Void)?
     @State private var picking = false
     @State private var name: String
     @State private var exercises: [ExerciseDraft]
     @State private var error: String?
 
-    init(template: WorkoutTemplate? = nil, draft: TemplateDraft? = nil) {
+    init(template: WorkoutTemplate? = nil, draft: TemplateDraft? = nil, onImport: ((TemplateDraft) -> Void)? = nil, onCancel: (() -> Void)? = nil) {
         self.template = template
-        isImport = draft != nil
+        self.onImport = onImport
+        self.onCancel = onCancel
         _name = State(initialValue: template?.name ?? draft?.name ?? "")
         let names = template?.exercises ?? draft?.exercises ?? [""]
         let counts = template?.setCounts ?? draft?.setCounts
@@ -216,7 +218,7 @@ struct TemplateEditor: View {
         }
         .navigationTitle(template == nil ? "New template" : "Edit template")
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+            ToolbarItem(placement: .cancellationAction) { Button("Cancel") { onCancel?(); dismiss() } }
             ToolbarItem(placement: .primaryAction) { EditButton().accessibilityLabel("Reorder exercises") }
             ToolbarItem(placement: .confirmationAction) {
                 Button("Save") { save() }.accessibilityIdentifier("saveTemplate")
@@ -243,8 +245,9 @@ struct TemplateEditor: View {
                 if let video = try VideoLink.normalized(fields.video) { videos[name] = video }
             }
             let links = videos.isEmpty ? nil : videos
-            if isImport {
-                try TemplatePack.checkLibrary([TemplateDraft(name: name, exercises: exercises, setCounts: counts, videoURLs: links)], in: context)
+            if let onImport {
+                onImport(TemplateDraft(name: name, exercises: exercises, setCounts: counts, videoURLs: links))
+                return
             }
             var names = Set(try context.fetch(FetchDescriptor<LibraryExercise>()).map { $0.name.lowercased() })
             let additions = exercises.filter { names.insert($0.lowercased()).inserted }.map { LibraryExercise(name: $0, videoURL: videos[$0]) }
