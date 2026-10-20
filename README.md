@@ -19,13 +19,29 @@ The 0.3 preview adds a Live Activity extension. Preserve app extensions when Sid
 - **Finish** asks for confirmation before moving a workout to History. Cancel keeps logging.
 - Delete a finished workout from its detail screen, or swipe it in History. Confirmation names the workout/date. Templates and other workouts stay intact.
 
+## Calendar plans and walking
+
+The **Calendar** tab assigns one saved template or **Walking** to a date. Tap a date, then Assign to choose **This date only** or a weekly repeat from that date onward. An exact-date override wins over the weekly rule. Clear a single date without cancelling its weekly pattern; weekly edits apply from the selected date onward and keep earlier plans. Future exact-date overrides remain in place.
+
+- **Blue / completed:** the assigned template has a finished workout on that day, or Walking was marked done.
+- **Red / pending:** assigned but not completed. Future red days say **Scheduled**, not missed.
+- **Neutral:** unassigned. Icons and accessible status labels accompany colours.
+
+Tap the assigned template's **Start workout** to use the existing logger and video shortcuts. If any workout is unfinished, **Resume** it instead; a second draft is never created. Workouts started from Templates also count when their stable template ID matches the date's assignment. Finishing counts on the actual local completion day, not the date you happened to select. Walking uses **Mark walk done** / **Undo completion** for today or earlier, with no sets or tracking permissions.
+
+Renaming a template does not break matching. Deleting a template keeps its history and assignment; missing templates show as unavailable until reassigned. Deleting a matching finished workout recalculates the day's colour. Existing older workouts have no source-template ID; the calendar does not guess matches by name. Date keys and recorded completion days remain stable across timezone changes; day/month navigation uses calendar arithmetic for DST and leap days.
+
+Full backups include calendar rules and walking completions. Template-only JSON does not include schedules, and template names such as Monday do not create calendar events automatically. There is no system Calendar sync, reminder, GPS or step tracking.
+
 ## Exercise library and video shortcuts
 
 Templates → **More (…) → Exercise library** manages reusable exercises with a name and optional YouTube video link. In a template, **Add exercises** opens a searchable multi-select picker; **Create new exercise** works without leaving it. Selected exercises include their videos, start with 3 sets and can be reordered or given different counts per template.
 
 Templates and workouts keep independent copies. Renaming/deleting a library entry does not change saved templates or workouts; changing a template does not alter an already-started workout. Existing template exercise names populate the library once on upgrade. Deleting a library entry does not make it reappear on the next launch.
 
-An optional **Add video** field accepts HTTPS YouTube watch, short, Shorts or embed links. Links are normalized to a standard video address, dropping tracking, playlist and timestamp parameters. A small accessible play icon appears beside a linked exercise while logging. Tapping opens YouTube or the browser; the app does not fetch thumbnails, embed, autoplay or download video. Watching needs internet; logging remains offline.
+An optional **Add video** field accepts HTTPS YouTube watch, short, Shorts or embed links. Links are normalized to a standard video address, preserving start timestamps while dropping tracking and playlist parameters. A small accessible play icon appears beside a linked exercise while logging. Tapping opens YouTube or the browser; the app does not fetch thumbnails, embed, autoplay or download video. Watching needs internet; logging remains offline. Start times such as `?t=90`, `?t=90s`, `?t=1m30s`, `?start=90` and `#t=1m30s` are stored as `&t=90`. Invalid or conflicting times are rejected instead of silently discarded.
+
+**Timestamp repair:** 0.5.0 stripped timestamps when saving links. Updating cannot recover them: re-add the original timestamped URL to the exercise in each affected template (and the library for future selections). Existing workouts retain their earlier snapshots. Older builds may reject backups containing timestamped links.
 
 ## Import / export templates or a whole plan
 
@@ -79,17 +95,19 @@ Import shows new/skipped counts and asks for confirmation. It adds missing recor
 
 Export your current data before resolving conflicting copies. Keep the original backup file. Imports do not include unsaved editor text, and importing an old backup can bring back records you deleted since exporting it.
 
-### Backup format (version 3)
+### Backup format (version 4)
 
 ```json
-{"schemaVersion":3,"preferredWeightUnit":"kg","templates":[],"sessions":[]}
+{"schemaVersion":4,"preferredWeightUnit":"kg","templates":[],"sessions":[]}
 ```
 
-The app still imports version 1 and 2 backups. Version 1 does not invent planned sets. New exports use version 3; older app versions cannot read them. Full backups include unused library exercises as well as template/session video snapshots. Restoring older backups also makes their template exercises available in the library. Identical library definitions with different IDs are reused by name during a merge; conflicting videos stop the import. Updating adds library tables and optional video metadata without rewriting existing logged sets. Upgrade/reopen regression tests check both previous stored-field layouts.
+The app still imports version 1, 2 and 3 backups. Version 1 does not invent planned sets. New exports use version 4; older app versions cannot read them. Full backups include unused library exercises as well as template/session video snapshots. Restoring older backups also makes their template exercises available in the library. Identical library definitions with different IDs are reused by name during a merge; conflicting videos stop the import. Updating adds calendar tables and optional source-template/completion-day metadata without rewriting existing logged sets. Upgrade/reopen regression tests check both previous stored-field layouts.
 
+- Optional `calendarRules`: IDs, exact/weekly scope, local `startDay`/exclusive `endDay`, kind and template ID/name snapshot. Rules with overlapping weekly intervals or duplicate exact dates are rejected, including during merges.
+- Optional `walkingCompletions`: stable IDs and local `day` keys; duplicate days/conflicts abort the whole import.
 - Optional `libraryExercises`: records with `id`, `name` and optional `videoURL`. Library IDs and case-insensitive names must be unique. The store-local setup marker is not exported.
 - Template fields: `id` (UUID), `name`, ordered `exercises`, optional `setCounts` (one count per exercise, in the same order), optional `videoURLs` mapping exact exercise names to canonical YouTube links.
-- Session fields: `id`, `startedAt`, optional/null `finishedAt`, `templateName`, ordered `exercises`, `unit` (`kg`/`lb`), ordered logged `sets`, optional ordered `plannedSets` (`id`, `exercise`). Optional `videoURLs` preserves this workout's own links. A logged set uses its planned row's UUID, so logging a later row first does not move it to a different slot.
+- Session fields: `id`, `startedAt`, optional/null `finishedAt`, `templateName`, ordered `exercises`, `unit` (`kg`/`lb`), ordered logged `sets`, optional ordered `plannedSets` (`id`, `exercise`). Optional `videoURLs` preserves this workout's own links. Optional `sourceTemplateID` and `completedDay` preserve calendar matching; older records stay unlinked. A logged set uses its planned row's UUID, so logging a later row first does not move it to a different slot.
 - Set fields: `id`, `exercise`, `weight`, `reps`, `rpe`. Weights/RPE are JSON numbers, independent of keyboard locale.
 - Dates use UTC ISO-8601 **millisecond precision**, e.g. `2026-01-01T12:00:00.123Z`. Conflict comparison uses that same precision.
 - Input/export limit: **25 MiB**. Invalid fields, duplicate record/set IDs, empty completed workouts and multiple drafts are rejected before insertion. Workouts do not need a surviving template.

@@ -14,7 +14,7 @@ final class TemplatePackTests: XCTestCase {
     private var otherCanonical: String { "https://www.youtube.com/watch?v=\(otherVideoID)" }
 
     private func store(url: URL? = nil) throws -> ModelContainer {
-        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self])
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self])
         let config = url.map { ModelConfiguration(schema: schema, url: $0, cloudKitDatabase: .none) }
             ?? ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: [config])
@@ -221,7 +221,7 @@ final class TemplatePackTests: XCTestCase {
         }
 
         let backup = try DataTransfer.snapshot(in: context, unit: .kg)
-        XCTAssertEqual(backup.schemaVersion, 3)
+        XCTAssertEqual(backup.schemaVersion, 4)
         XCTAssertEqual(backup.libraryExercises?.count, 2)
         XCTAssertEqual(backup.templates[0].videoURLs ?? [:], ["Bench": canonical])
         XCTAssertEqual(backup.sessions[0].videoURLs ?? [:], ["Bench": canonical])
@@ -325,13 +325,41 @@ final class TemplatePackTests: XCTestCase {
         XCTAssertThrowsError(try DataTransfer.apply(backup, in: target.mainContext))
     }
 
+    func testTimestampSurvivesTemplateLibrarySessionAndBackupTransfers() throws {
+        let text = """
+        {"name":"Monday","exercises":[{"name":"Bench","sets":3,"videoURL":"https://youtu.be/\(videoID)?t=1m30s&si=tracking"}]}
+        """
+        let drafts = try TemplatePack.decode(Data(text.utf8))
+        let expected = canonical + "&t=90"
+        XCTAssertEqual(drafts[0].videoURLs?["Bench"], expected)
+        let source = try store()
+        try TemplatePack.apply(drafts, in: source.mainContext)
+        let template = try XCTUnwrap(source.mainContext.fetch(FetchDescriptor<WorkoutTemplate>()).first)
+        let library = try XCTUnwrap(source.mainContext.fetch(FetchDescriptor<LibraryExercise>()).first)
+        XCTAssertEqual(library.videoURL, expected)
+        let session = try WorkoutSession.start(template: template, unit: .kg, in: source.mainContext)
+        XCTAssertEqual(session.videoURLs?["Bench"], expected)
+        let shared = try TemplatePack.decode(TemplatePack.encode([TemplatePack.draft(template)]))
+        XCTAssertEqual(shared[0].videoURLs?["Bench"], expected)
+        let backup = try DataTransfer.decode(DataTransfer.encode(DataTransfer.snapshot(in: source.mainContext, unit: .kg)))
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutLog-timestamp-\(UUID()).store")
+        do {
+            let target = try store(url: url)
+            try DataTransfer.apply(backup, in: target.mainContext)
+        }
+        let reopened = try store(url: url)
+        XCTAssertEqual(try reopened.mainContext.fetch(FetchDescriptor<LibraryExercise>()).first?.videoURL, expected)
+        XCTAssertEqual(try reopened.mainContext.fetch(FetchDescriptor<WorkoutTemplate>()).first?.videoURLs?["Bench"], expected)
+        XCTAssertEqual(try reopened.mainContext.fetch(FetchDescriptor<WorkoutSession>()).first?.videoURLs?["Bench"], expected)
+    }
+
     func testFailedPackSaveLeavesTheSavedFileUnchanged() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutLog-pack-readonly-\(UUID()).store")
         do {
             let target = try store(url: url)
             try target.mainContext.commit { target.mainContext.insert(WorkoutTemplate(name: "Kept", exercises: ["Row"])) }
         }
-        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self])
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self])
         let config = ModelConfiguration(schema: schema, url: url, allowsSave: false, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: [config])
         let context = ModelContext(container)

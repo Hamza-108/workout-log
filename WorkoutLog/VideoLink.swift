@@ -5,7 +5,7 @@ enum VideoLink {
     private static let allowedHosts: Set<String> = ["youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"]
     private static let idCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-")
 
-    /// Returns the canonical link (https://www.youtube.com/watch?v=ID) or nil when there is no link.
+    /// Returns a canonical video link with an optional start time in seconds.
     static func normalized(_ text: String?) throws -> String? {
         guard let text else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -29,7 +29,8 @@ enum VideoLink {
         guard let id = videoID(in: parts, host: authority.lowercased()) else {
             throw LogError(message: "Use a YouTube video link with an 11 character video ID.")
         }
-        return "https://www.youtube.com/watch?v=\(id)"
+        let time = try startTime(in: parts)
+        return "https://www.youtube.com/watch?v=\(id)" + (time.map { "&t=\($0)" } ?? "")
     }
 
     /// Checks stored links of a template or workout: every key must be one of its exercises
@@ -79,6 +80,49 @@ enum VideoLink {
         default:
             return nil
         }
+    }
+
+    private static func startTime(in parts: URLComponents) throws -> Int? {
+        var values = (parts.queryItems ?? []).filter { $0.name == "t" || $0.name == "start" }.map(\.value)
+        if let fragment = parts.fragment {
+            if fragment.hasPrefix("t=") { values.append(String(fragment.dropFirst(2))) }
+            else if fragment.hasPrefix("start=") { values.append(String(fragment.dropFirst(6))) }
+        }
+        var result: Int?
+        for value in values {
+            guard let value else { throw LogError(message: "The YouTube start time is empty.") }
+            let seconds = try duration(value)
+            if let result, result != seconds {
+                throw LogError(message: "The YouTube link contains conflicting start times.")
+            }
+            result = seconds
+        }
+        return result
+    }
+
+    private static func duration(_ text: String) throws -> Int {
+        let error = LogError(message: "Use a non-negative YouTube start time, such as 90, 90s or 1m30s.")
+        guard !text.isEmpty else { throw error }
+        if text.allSatisfy({ $0 >= "0" && $0 <= "9" }) {
+            guard let seconds = Int(text) else { throw error }
+            return seconds
+        }
+        var number = ""
+        var total = 0
+        var previousUnit = 3601
+        let units: [Character: Int] = ["h": 3600, "m": 60, "s": 1]
+        for character in text {
+            if character >= "0", character <= "9" { number.append(character); continue }
+            guard let unit = units[character], unit < previousUnit, let value = Int(number) else { throw error }
+            let (seconds, multiplyOverflow) = value.multipliedReportingOverflow(by: unit)
+            let (sum, addOverflow) = total.addingReportingOverflow(seconds)
+            guard !multiplyOverflow, !addOverflow else { throw error }
+            total = sum
+            previousUnit = unit
+            number = ""
+        }
+        guard number.isEmpty else { throw error }
+        return total
     }
 
     private static func validID(_ text: String) -> String? {

@@ -12,13 +12,9 @@ final class VideoLinkTests: XCTestCase {
             "https://youtube.com/watch?v=\(id)",
             "https://m.youtube.com/watch?v=\(id)",
             "https://youtu.be/\(id)",
-            "https://youtu.be/\(id)?t=30",
-            "https://www.youtube.com/watch?v=\(id)&t=42&list=PL1234567890&index=2",
-            "https://www.youtube.com/watch?v=\(id)#t=30",
             "https://www.youtube.com/shorts/\(id)",
             "https://m.youtube.com/shorts/\(id)",
             "https://www.youtube.com/embed/\(id)",
-            "https://www.youtube.com/embed/\(id)?start=10",
             "  https://youtu.be/\(id)  ",
             "HTTPS://WWW.YOUTUBE.COM/watch?v=\(id)"
         ]
@@ -26,6 +22,35 @@ final class VideoLinkTests: XCTestCase {
             XCTAssertEqual(try VideoLink.normalized(text), canonical, text)
         }
         XCTAssertEqual(try VideoLink.normalized("https://youtu.be/abc_-ABC123"), "https://www.youtube.com/watch?v=abc_-ABC123")
+    }
+
+    func testTimestampsSurviveNormalizationAndTrackingIsDropped() throws {
+        let cases: [(String, Int)] = [
+            ("https://youtu.be/\(id)?t=90&si=tracking", 90),
+            ("https://www.youtube.com/watch?v=\(id)&t=90s&list=PL123", 90),
+            ("https://www.youtube.com/watch?v=\(id)&t=1m30s", 90),
+            ("https://m.youtube.com/watch?v=\(id)&t=1h2m3s", 3723),
+            ("https://www.youtube.com/embed/\(id)?start=90", 90),
+            ("https://www.youtube.com/watch?v=\(id)#t=1m30s", 90),
+            ("https://youtu.be/\(id)?t=0", 0),
+            ("https://www.youtube.com/shorts/\(id)?t=2m", 120),
+            ("https://www.youtube.com/watch?v=\(id)&start=90&t=90s#t=1m30s", 90)
+        ]
+        for (input, seconds) in cases {
+            let expected = canonical + "&t=\(seconds)"
+            XCTAssertEqual(try VideoLink.normalized(input), expected, input)
+            XCTAssertEqual(try VideoLink.normalized(expected), expected)
+            XCTAssertNoThrow(try VideoLink.validate(["Bench": expected], exercises: ["Bench"]))
+        }
+    }
+
+    func testRejectsInvalidOrConflictingStartTimesInsteadOfLosingThem() {
+        for time in ["", "-1", "+2", "1.5", "abc", "1:30", "1s2m", "1m2m", "h", "1m30", "999999999999999999999999999999999", "9223372036854775807h"] {
+            XCTAssertThrowsError(try VideoLink.normalized(canonical + "&t=" + time), time)
+        }
+        XCTAssertThrowsError(try VideoLink.normalized(canonical + "&t"))
+        XCTAssertThrowsError(try VideoLink.normalized(canonical + "&t=30&start=90"))
+        XCTAssertThrowsError(try VideoLink.normalized(canonical + "&t=30#t=90"))
     }
 
     func testBlankLinksAreDropped() throws {
@@ -103,7 +128,7 @@ final class VideoLinkTests: XCTestCase {
         XCTAssertThrowsError(try VideoLink.validate(["Bench": "https://evil.com/watch?v=\(id)"], exercises: ["Bench"]))
         XCTAssertThrowsError(try VideoLink.validate(["Bench": "http://www.youtube.com/watch?v=\(id)"], exercises: ["Bench"]))
         XCTAssertThrowsError(try VideoLink.validate(["Bench": "https://youtu.be/\(id)"], exercises: ["Bench"]))
-        XCTAssertThrowsError(try VideoLink.validate(["Bench": "https://www.youtube.com/watch?v=\(id)&t=30"], exercises: ["Bench"]))
+        XCTAssertNoThrow(try VideoLink.validate(["Bench": "https://www.youtube.com/watch?v=\(id)&t=30"], exercises: ["Bench"]))
         XCTAssertThrowsError(try VideoLink.validate(["Bench": " https://www.youtube.com/watch?v=\(id) "], exercises: ["Bench"]))
     }
 }
