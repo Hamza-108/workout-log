@@ -69,7 +69,6 @@ enum TemplatePack {
             return TemplateDraft(name: name, exercises: exercises, setCounts: counts, videoURLs: videos.isEmpty ? nil : videos)
         }
         try validate(drafts)
-        try validateDefinitions(drafts)
         return drafts
     }
 
@@ -80,19 +79,6 @@ enum TemplatePack {
             guard name == draft.name, exercises == draft.exercises else { throw LogError(message: "Trim template and exercise names before importing.") }
             try WorkoutTemplate.validateSetCounts(draft.setCounts, exercises: exercises)
             try VideoLink.validate(draft.videoURLs, exercises: exercises)
-        }
-    }
-
-    private static func validateDefinitions(_ drafts: [TemplateDraft]) throws {
-        var definitions: [String: String] = [:]
-        for draft in drafts {
-            for (exercise, video) in draft.videoURLs ?? [:] {
-                let key = exercise.lowercased()
-                if let previous = definitions[key], previous != video {
-                    throw LogError(message: "Conflicting video links for \(exercise). Use one definition before importing.")
-                }
-                definitions[key] = video
-            }
         }
     }
 
@@ -116,37 +102,13 @@ enum TemplatePack {
     }
 
     static func checkLibrary(_ drafts: [TemplateDraft], in context: ModelContext) throws {
-        try validate(drafts)
-        try validateDefinitions(drafts)
-        let library = try context.fetch(FetchDescriptor<LibraryExercise>())
-        for draft in drafts {
-            for name in draft.exercises {
-                if let saved = library.first(where: { $0.name.lowercased() == name.lowercased() }),
-                   let incoming = draft.videoURLs?[name], saved.videoURL != incoming {
-                    throw LogError(message: "The library already has a different video for \(name). Edit the JSON or library entry before importing. Nothing was imported.")
-                }
-            }
-        }
+        _ = try resolve(review(drafts, in: context), choices: [:])
     }
 
     static func apply(_ drafts: [TemplateDraft], in context: ModelContext) throws {
-        try checkLibrary(drafts, in: context)
-        var names = Set(try context.fetch(FetchDescriptor<LibraryExercise>()).map { $0.name.lowercased() })
-        var additions: [LibraryExercise] = []
-        for draft in drafts {
-            for name in draft.exercises where names.insert(name.lowercased()).inserted {
-                let video = drafts.compactMap { candidate in
-                    candidate.videoURLs?.first { $0.key.lowercased() == name.lowercased() }?.value
-                }.first
-                additions.append(LibraryExercise(name: name, videoURL: video))
-            }
-        }
-        let templates = drafts.map { WorkoutTemplate(name: $0.name, exercises: $0.exercises, setCounts: $0.setCounts, videoURLs: $0.videoURLs) }
-        try context.commit {
-            for exercise in additions { context.insert(exercise) }
-            for template in templates { context.insert(template) }
-        }
+        try apply(review(drafts, in: context), choices: [:], in: context)
     }
+
 }
 
 enum DataTransfer {
