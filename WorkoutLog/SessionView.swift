@@ -28,33 +28,7 @@ struct SessionView: View {
                 Text("Logged sets save immediately. You can close and resume this workout later.")
             }
             ForEach(session.exercises, id: \.self) { exercise in
-                Section(exercise) {
-                    ForEach(Array(session.rows(for: exercise).enumerated()), id: \.element.id) { index, row in
-                        let logged = session.sets.first { $0.id == row.id }
-                        Button {
-                            selection = SetSelection(id: row.id, exercise: exercise, existing: logged)
-                        } label: {
-                            if let logged {
-                                SetRow(set: logged, unit: session.unit).foregroundStyle(.primary)
-                            } else {
-                                HStack {
-                                    Text("Set \(index + 1)")
-                                    Spacer()
-                                    Text("Not logged").foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                        .accessibilityHint(logged == nil ? "Log this planned set" : "Edit this set")
-                        .accessibilityIdentifier(logged == nil ? "plannedSet-\(exercise)-\(index + 1)" : "loggedSet")
-                        .swipeActions {
-                            Button("Delete", role: .destructive) { deleting = row }
-                        }
-                    }
-                    Button {
-                        selection = SetSelection(exercise: exercise)
-                    } label: { Label("Add set", systemImage: "plus.circle") }
-                        .accessibilityIdentifier("addSet-\(exercise)")
-                }
+                exerciseSection(exercise)
             }
             Section {
                 Button("Discard workout", role: .destructive) { discarding = true }
@@ -99,6 +73,40 @@ struct SessionView: View {
         .alert("Could not save", isPresented: Binding(get: { error != nil }, set: { if !$0 { error = nil } })) {
             Button("OK") { error = nil }
         } message: { Text(error ?? "") }
+    }
+
+    private func exerciseSection(_ exercise: String) -> some View {
+        Section(exercise) {
+            ForEach(Array(session.rows(for: exercise).enumerated()), id: \.element.id) { index, row in
+                setButton(row, number: index + 1)
+            }
+            Button {
+                selection = SetSelection(exercise: exercise)
+            } label: { Label("Add set", systemImage: "plus.circle") }
+                .accessibilityIdentifier("addSet-\(exercise)")
+        }
+    }
+
+    private func setButton(_ row: PlannedSet, number: Int) -> some View {
+        let logged = session.sets.first { $0.id == row.id }
+        return Button {
+            selection = SetSelection(id: row.id, exercise: row.exercise, existing: logged)
+        } label: {
+            if let logged {
+                SetRow(set: logged, unit: session.unit).foregroundStyle(.primary)
+            } else {
+                HStack {
+                    Text("Set \(number)")
+                    Spacer()
+                    Text("Not logged").foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityHint(logged == nil ? "Log this planned set" : "Edit this set")
+        .accessibilityIdentifier(logged == nil ? "plannedSet-\(row.exercise)-\(number)" : "loggedSet")
+        .swipeActions {
+            Button("Delete", role: .destructive) { deleting = row }
+        }
     }
 
     private func finish() {
