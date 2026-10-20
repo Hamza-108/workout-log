@@ -149,6 +149,8 @@ final class WorkoutSession {
     var sets: [LoggedSet]
     var plannedSets: [PlannedSet]?
     var videoURLs: [String: String]?
+    var sourceTemplateID: UUID?
+    var completedDay: String?
 
     init(templateName: String, exercises: [String], unit: WeightUnit) {
         id = UUID()
@@ -167,6 +169,7 @@ final class WorkoutSession {
         try VideoLink.validate(template.videoURLs, exercises: exercises)
         let session = WorkoutSession(templateName: name, exercises: exercises, unit: unit)
         session.videoURLs = template.videoURLs
+        session.sourceTemplateID = template.id
         if let counts = template.setCounts {
             session.plannedSets = zip(exercises, counts).flatMap { exercise, count in
                 (0..<count).map { _ in PlannedSet(exercise: exercise) }
@@ -207,11 +210,12 @@ final class WorkoutSession {
         plannedSets?.removeAll { $0.id == id }
     }
 
-    func finish() throws {
+    func finish(at date: Date = Date(), calendar: Calendar = Schedule.calendar()) throws {
         guard finishedAt == nil else { throw LogError(message: "This workout is already finished.") }
         guard !sets.isEmpty else { throw LogError(message: "Log at least one set before finishing.") }
         for set in sets { try set.validate() }
-        finishedAt = Date()
+        finishedAt = date
+        completedDay = Schedule.day(date, calendar: calendar)
     }
 }
 
