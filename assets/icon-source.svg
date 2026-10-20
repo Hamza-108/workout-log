@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Stickman doodle. Render at 512px, nearest-neighbor upscale to 1024px RGB. No baked-in mask. -->
+  <rect width="1024" height="1024" fill="#eee3c7"/>
+  <g stroke="#29282a" stroke-width="14" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Wobbly chair, desk and legs. -->
+    <path d="M235 502 L242 610 L238 669 L424 675 M256 679 L251 789 L244 891 M415 680 L428 784 L425 882"/>
+    <path d="M521 520 L649 539 L784 552 L922 573 L873 681 L697 655 L493 616 Z" fill="#8eacb1"/>
+    <path d="M521 625 L526 755 L522 890 M858 686 L864 773 L861 891 M913 594 L917 710 L914 789"/>
+    <!-- A sheet and a couple of workout scribbles; deliberately no tiny text. -->
+    <path d="M649 465 L751 476 L862 494 L816 602 L712 584 L613 569 Z" fill="#fff9e9" stroke-width="8"/>
+    <path d="M660 501 L674 506 L668 519 L654 513 Z M692 510 L721 516 L735 515 L778 525
+             M647 533 L660 539 L654 552 L641 546 Z M678 544 L714 552 L706 556 L765 564" stroke-width="6"/>
+    <path d="M654 538 L658 548 L674 531" stroke="#4c7953" stroke-width="8"/>
+    <!-- Stick legs and the leaning body. -->
+    <path d="M376 641 L330 714 L286 790 L197 843 L231 849 M376 642 L437 709 L482 783 L568 825 L591 821"/>
+    <path d="M336 373 L343 436 L355 490 L361 564 L376 640" stroke-width="16"/>
+    <!-- An uneven round head, with a simple face looking at the page. -->
+    <path d="M309 190 L350 196 L383 217 L400 247 L408 279 L399 320 L380 347 L347 365 L311 371 L274 359 L244 338 L226 304 L221 271 L231 234 L253 208 L280 195 Z" fill="#fff9e9"/>
+    <path d="M329 276 L332 280 M369 284 L372 287" stroke-width="12"/>
+    <path d="M329 319 L347 328 L365 318" stroke-width="9"/>
+    <!-- The near arm holds a short dumbbell-pen above the paper. -->
+    <path d="M348 428 L418 472 L491 496 L549 460 L609 418"/>
+    <path d="M351 447 L398 521 L451 558 L534 565 L617 557" stroke-width="12"/>
+    <path d="M617 557 L635 547 M617 557 L638 558 M617 557 L630 570" stroke-width="8"/>
+    <!-- Both weights are exaggerated, and the nib touches the paper. -->
+    <g transform="translate(637 433) rotate(48)" stroke-width="8">
+      <path d="M-72 -9 L65 -10 L65 10 L-71 8 Z" fill="#aeb9ba"/>
+      <path d="M-91 -31 L-75 -34 L-72 32 L-91 33 Z M-70 -48 L-48 -47 L-46 47 L-70 49 Z" fill="#4e6674"/>
+      <path d="M47 -48 L71 -46 L69 48 L47 47 Z M76 -33 L93 -32 L95 32 L76 34 Z" fill="#4e6674"/>
+      <path d="M94 -8 L112 -7 L112 7 L94 8 Z" fill="#b7bec0" stroke-width="6"/>
+      <path d="M112 -7 L132 0 L112 7 Z" fill="#29282a" stroke-width="5"/>
+      <path d="M-59 -36 L-57 34 M57 -35 L60 35" stroke="#90a4ac" stroke-width="4"/>
+    </g>
+    <!-- Just three stick fingers over the grip, not anatomical hands. -->
+    <path d="M605 420 L616 406 L626 410 L629 422 M609 428 L621 415 M615 436 L629 424" stroke-width="9"/>
+    <path d="M730 531 L742 543 L758 541" stroke-width="6"/>
+  </g>
+</svg>

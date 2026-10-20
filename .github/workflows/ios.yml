@@ -64,6 +64,8 @@ jobs:
               extension = plistlib.loads(package.read("Payload/WorkoutLog.app/PlugIns/WorkoutLogActivity.appex/Info.plist"))
               assert app["CFBundleIdentifier"] == "com.hamzabehrem.workoutlog"
               assert app["NSSupportsLiveActivities"] is True
+              assert "UISceneConfigurations" in app["UIApplicationSceneManifest"]
+              assert app["CFBundleIcons"]["CFBundlePrimaryIcon"]["CFBundleIconName"] == "AppIcon"
               assert "workoutlog" in app["CFBundleURLTypes"][0]["CFBundleURLSchemes"]
               assert extension["CFBundleIdentifier"] == app["CFBundleIdentifier"] + ".activity"
               assert extension["NSExtension"]["NSExtensionPointIdentifier"] == "com.apple.widgetkit-extension"
