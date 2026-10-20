@@ -60,6 +60,7 @@ struct TemplateImportView: View {
             Section("Or enter / paste JSON") {
                 TextEditor(text: $text)
                     .font(.system(.footnote, design: .monospaced))
+                    .keyboardType(.asciiCapable)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
                     .focused($enteringText).frame(minHeight: 150)
                     .accessibilityLabel("Template JSON text")
