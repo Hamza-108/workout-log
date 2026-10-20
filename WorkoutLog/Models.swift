@@ -131,7 +131,7 @@ final class WorkoutSession {
             throw LogError(message: "This set belongs to a different exercise.")
         }
         if let plannedSets, !plannedSets.contains(where: { $0.id == set.id }) {
-            plannedSets?.append(PlannedSet(id: set.id, exercise: set.exercise))
+            self.plannedSets?.append(PlannedSet(id: set.id, exercise: set.exercise))
         }
         if let index = sets.firstIndex(where: { $0.id == set.id }) {
             sets[index] = set
