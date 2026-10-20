@@ -13,7 +13,7 @@ struct SessionView: View {
     @Environment(\.dismiss) private var dismiss
     @Bindable var session: WorkoutSession
     @State private var selection: SetSelection?
-    @State private var deleting: LoggedSet?
+    @State private var deleting: PlannedSet?
     @State private var discarding = false
     @State private var finishing = false
     @State private var error: String?
@@ -29,16 +29,25 @@ struct SessionView: View {
             }
             ForEach(session.exercises, id: \.self) { exercise in
                 Section(exercise) {
-                    ForEach(session.sets.filter { $0.exercise == exercise }) { set in
+                    ForEach(Array(session.rows(for: exercise).enumerated()), id: \.element.id) { index, row in
+                        let logged = session.sets.first { $0.id == row.id }
                         Button {
-                            selection = SetSelection(exercise: exercise, existing: set)
+                            selection = SetSelection(id: row.id, exercise: exercise, existing: logged)
                         } label: {
-                            SetRow(set: set, unit: session.unit)
-                                .foregroundStyle(.primary)
+                            if let logged {
+                                SetRow(set: logged, unit: session.unit).foregroundStyle(.primary)
+                            } else {
+                                HStack {
+                                    Text("Set \(index + 1)")
+                                    Spacer()
+                                    Text("Not logged").foregroundStyle(.secondary)
+                                }
+                            }
                         }
-                        .accessibilityHint("Edit this set")
+                        .accessibilityHint(logged == nil ? "Log this planned set" : "Edit this set")
+                        .accessibilityIdentifier(logged == nil ? "plannedSet-\(exercise)-\(index + 1)" : "loggedSet")
                         .swipeActions {
-                            Button("Delete", role: .destructive) { deleting = set }
+                            Button("Delete", role: .destructive) { deleting = row }
                         }
                     }
                     Button {
@@ -63,12 +72,12 @@ struct SessionView: View {
             }
         }
         .sheet(item: $selection) { selection in
-            NavigationStack { SetEditor(session: session, exercise: selection.exercise, existing: selection.existing) }
+            NavigationStack { SetEditor(session: session, exercise: selection.exercise, existing: selection.existing, setID: selection.id) }
         }
         .confirmationDialog("Delete this set?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             Button("Delete set", role: .destructive) {
                 guard let set = deleting else { return }
-                do { try context.commit { session.sets.removeAll { $0.id == set.id } } }
+                do { try context.commit { try session.removeSet(set.id) } }
                 catch { self.error = error.localizedDescription }
                 deleting = nil
             }
@@ -124,15 +133,17 @@ private struct SetEditor: View {
     let session: WorkoutSession
     let exercise: String
     let existing: LoggedSet?
+    let setID: UUID
     @State private var weight: String
     @State private var reps: String
     @State private var rpe: Double
     @State private var error: String?
 
-    init(session: WorkoutSession, exercise: String, existing: LoggedSet?) {
+    init(session: WorkoutSession, exercise: String, existing: LoggedSet?, setID: UUID) {
         self.session = session
         self.exercise = exercise
         self.existing = existing
+        self.setID = setID
         _weight = State(initialValue: existing.map { WeightInput.format($0.weight) } ?? "")
         _reps = State(initialValue: existing.map { String($0.reps) } ?? "")
         _rpe = State(initialValue: existing?.rpe ?? 7)
@@ -173,7 +184,7 @@ private struct SetEditor: View {
             guard let parsedReps = Int(reps.trimmingCharacters(in: .whitespacesAndNewlines)), parsedReps > 0 else {
                 throw LogError(message: "Reps must be a positive whole number.")
             }
-            let set = LoggedSet(id: existing?.id ?? UUID(), exercise: exercise, weight: parsedWeight, reps: parsedReps, rpe: rpe)
+            let set = LoggedSet(id: existing?.id ?? setID, exercise: exercise, weight: parsedWeight, reps: parsedReps, rpe: rpe)
             try context.commit { try session.record(set) }
             dismiss()
         } catch { self.error = error.localizedDescription }

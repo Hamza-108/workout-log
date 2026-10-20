@@ -1,11 +1,10 @@
 import Foundation
 import SwiftData
 
-struct TemplateDraft: Identifiable {
+struct TemplateDraft {
     var name: String
     var exercises: [String]
     var setCounts: [Int]
-    var id: String { name + exercises.joined(separator: "\n") + setCounts.description }
 
     static let example = #"{"name":"Push day","exercises":[{"name":"Bench press","sets":3},{"name":"Overhead press","sets":2}]}"#
 
