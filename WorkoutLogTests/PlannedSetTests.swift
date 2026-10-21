@@ -5,7 +5,7 @@ import XCTest
 @MainActor
 final class PlannedSetTests: XCTestCase {
     private func store(_ url: URL? = nil) throws -> ModelContainer {
-        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self])
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self, BodyWeightEntry.self])
         let config = url.map { ModelConfiguration(schema: schema, url: $0, cloudKitDatabase: .none) }
             ?? ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let result = try ModelContainer(for: schema, configurations: [config])

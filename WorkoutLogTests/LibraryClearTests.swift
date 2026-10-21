@@ -5,7 +5,7 @@ import XCTest
 @MainActor
 final class LibraryClearTests: XCTestCase {
     private func store(url: URL? = nil, writable: Bool = true) throws -> ModelContainer {
-        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self])
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self, BodyWeightEntry.self])
         let configuration = url.map { ModelConfiguration(schema: schema, url: $0, allowsSave: writable, cloudKitDatabase: .none) }
             ?? ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let store = try ModelContainer(for: schema, configurations: [configuration])
