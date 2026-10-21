@@ -467,6 +467,13 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(row.label.contains("79.5 lb"), row.label)
         app.buttons["deleteBodyWeight"].firstMatch.tap()
         app.buttons["Delete weigh-in"].tap()
+        let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: row)
+        XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 10), .completed)
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Progress"].tap()
+        app.segmentedControls["progressMode"].buttons["Body weight"].tap()
+        XCTAssertTrue(app.buttons["addBodyWeight"].waitForExistence(timeout: 10))
         XCTAssertFalse(row.exists)
     }
 
