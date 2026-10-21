@@ -29,12 +29,20 @@ enum WeightInput {
     }
 }
 
+enum SetKind: String, Codable, CaseIterable, Hashable {
+    case working, warmup
+    var title: String { self == .working ? "Working" : "Warm-up" }
+    func label(_ number: Int) -> String { self == .working ? "Set \(number)" : "Warm-up \(number)" }
+}
+
 struct LoggedSet: Codable, Identifiable, Equatable {
     var id = UUID()
     var exercise: String
     var weight: Double
     var reps: Int
     var rpe: Double
+    var kind: SetKind? = nil
+    var effectiveKind: SetKind { kind ?? .working }
 
     func validate() throws {
         guard weight.isFinite, weight >= 0 else {
@@ -50,6 +58,8 @@ struct LoggedSet: Codable, Identifiable, Equatable {
 struct PlannedSet: Codable, Identifiable, Equatable {
     var id = UUID()
     var exercise: String
+    var kind: SetKind? = nil
+    var effectiveKind: SetKind { kind ?? .working }
 }
 
 @Model
@@ -199,8 +209,17 @@ final class WorkoutSession {
         if let slot = plannedSets?.first(where: { $0.id == set.id }), slot.exercise != set.exercise {
             throw LogError(message: "This set belongs to a different exercise.")
         }
-        if let plannedSets, !plannedSets.contains(where: { $0.id == set.id }) {
-            self.plannedSets?.append(PlannedSet(id: set.id, exercise: set.exercise))
+        if set.effectiveKind == .warmup, plannedSets == nil {
+            plannedSets = exercises.flatMap { rows(for: $0) }
+        }
+        if let index = plannedSets?.firstIndex(where: { $0.id == set.id }) {
+            plannedSets?[index].kind = set.kind
+        } else if plannedSets != nil {
+            let row = PlannedSet(id: set.id, exercise: set.exercise, kind: set.kind)
+            if set.effectiveKind == .warmup,
+               let index = plannedSets?.firstIndex(where: { $0.exercise == set.exercise && $0.effectiveKind == .working }) {
+                plannedSets?.insert(row, at: index)
+            } else { plannedSets?.append(row) }
         }
         if let index = sets.firstIndex(where: { $0.id == set.id }) {
             sets[index] = set
@@ -214,7 +233,26 @@ final class WorkoutSession {
         let ids = Set(planned.map(\.id))
         return planned.filter { $0.exercise == exercise } + sets.filter {
             $0.exercise == exercise && !ids.contains($0.id)
-        }.map { PlannedSet(id: $0.id, exercise: $0.exercise) }
+        }.map { PlannedSet(id: $0.id, exercise: $0.exercise, kind: $0.kind) }
+    }
+
+    func ordinal(for row: PlannedSet) -> Int? {
+        rows(for: row.exercise).filter { $0.effectiveKind == row.effectiveKind }
+            .firstIndex(where: { $0.id == row.id }).map { $0 + 1 }
+    }
+
+    func classify(_ id: UUID, as kind: SetKind) throws {
+        guard finishedAt == nil else { throw LogError(message: "This workout is already finished.") }
+        guard plannedSets?.contains(where: { $0.id == id }) == true || sets.contains(where: { $0.id == id }) else {
+            throw LogError(message: "This set is no longer available.")
+        }
+        if let index = plannedSets?.firstIndex(where: { $0.id == id }) { plannedSets?[index].kind = kind }
+        if let index = sets.firstIndex(where: { $0.id == id }) { sets[index].kind = kind }
+    }
+
+    var setSummary: String {
+        let warmups = sets.filter { $0.effectiveKind == .warmup }.count
+        return "\(sets.count - warmups) working · \(warmups) warm-up sets"
     }
 
     func removeSet(_ id: UUID) throws {
