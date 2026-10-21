@@ -19,6 +19,19 @@ The 0.3 preview adds a Live Activity extension. Preserve app extensions when Sid
 - **Finish** asks for confirmation before moving a workout to History. Cancel keeps logging.
 - Delete a finished workout from its detail screen, or swipe it in History. Confirmation names the workout/date. Templates and other workouts stay intact.
 
+## Previous sets, warm-ups and progress
+
+Each workout row shows a gray **Last** reference: weight × reps and RPE from the corresponding numbered row in the latest finished workout containing that exercise before this session started. Matching is case-insensitive by exercise name, not template; variation names stay separate. Warm-ups and working sets match independently. Missing/unlogged previous rows show `Last: —`, without borrowing the next row. The previous finish date appears above the exercise. Hints never autofill or log data; conversions show the original recorded units.
+
+Choose **Working / Warm-up** when logging/editing a set, or swipe a row to reclassify it. **Add warm-up set** adds an extra logged row without consuming preset working slots. Each exercise numbers `Warm-up 1, 2…` separately from `Set 1, 2…`; classification survives resume/restart and appears in History. Old sets default to Working—historical warm-ups cannot be inferred. Finish still requires at least one actual logged set, including a warm-up; empty planned rows never count.
+
+The **Progress** tab has **Lifting** and **Body weight** modes, display units and **1M / 3M / 6M / All** ranges. Charts have equivalent readable lists.
+
+- **Lifting:** choose an exercise to plot the heaviest logged working set from each finished workout, by finish date. Warm-ups, drafts and empty planned rows are excluded. Inspect a point for date, load, reps and RPE. The first-to-latest change describes load, not an estimated strength gain: different reps/RPE are not automatically equivalent performances. Names match case-insensitively; variations stay separate and renames start a new series. No automatic exercise merging or estimated 1RM.
+- **Body weight:** add a dated positive kg/lb weigh-in for today or earlier; one per local calendar day. Adding another for that day asks before updating. Edit a saved entry or delete with confirmation. See latest weight, net change and dated history without good/bad judgments, calorie/BMI calculations, goals or Health permissions. Original units stay attached to records; graph/display-unit changes never rewrite them. Civil-day keys remain stable across timezones.
+
+Body weights and set classifications are private history data in **full backups only**. Template-only JSON is unchanged; it does not include weigh-ins or per-session warm-up classification. No template-level warm-up presets, reminders or system integrations are added.
+
 ## Calendar plans and walking
 
 The **Calendar** tab assigns one saved template or **Walking** to a date. Tap a date, then Assign to choose **This date only** or a weekly repeat from that date onward. An exact-date override wins over the weekly rule. Clear a single date without cancelling its weekly pattern; weekly edits apply from the selected date onward and keep earlier plans. Future exact-date overrides remain in place.
@@ -90,7 +103,7 @@ Every conflict needs an explicit choice. Only one variant can override a given e
 
 ## Backups
 
-Templates → **More (…) → Data and backups** → **Export backup** or **Import backup**. Choose a private Files destination: backups contain your workout history as **unencrypted plain-text JSON**. Files/iCloud-provider behavior still needs an on-phone check.
+Templates → **More (…) → Data and backups** → **Export backup** or **Import backup**. Choose a private Files destination: backups contain your workout history and body-weight records as **unencrypted plain-text JSON**. Files/iCloud-provider behavior still needs an on-phone check.
 
 Import shows new/skipped counts and asks for confirmation. It adds missing records in one save:
 
@@ -101,14 +114,16 @@ Import shows new/skipped counts and asks for confirmation. It adds missing recor
 
 Export your current data before resolving conflicting copies. Keep the original backup file. Imports do not include unsaved editor text, and importing an old backup can bring back records you deleted since exporting it.
 
-### Backup format (version 4)
+### Backup format (version 5)
 
 ```json
-{"schemaVersion":4,"preferredWeightUnit":"kg","templates":[],"sessions":[]}
+{"schemaVersion":5,"preferredWeightUnit":"kg","templates":[],"sessions":[]}
 ```
 
-The app still imports version 1, 2 and 3 backups. Version 1 does not invent planned sets. New exports use version 4; older app versions cannot read them. Full backups include unused library exercises as well as template/session video snapshots. Restoring older backups also makes their template exercises available in the library. Identical library definitions with different IDs are reused by name during a merge; conflicting videos stop the import. Updating adds calendar tables and optional source-template/completion-day metadata without rewriting existing logged sets. Upgrade/reopen regression tests check both previous stored-field layouts.
+The app still imports version 1–4 backups. Version 1 does not invent planned sets; missing set classifications mean Working and no body-weight records are invented. New exports use version 5; older app versions cannot read them. Full backups include body-weight entries, set classifications, unused library exercises and template/session video snapshots. Restoring older backups also makes their template exercises available in the library. Identical library definitions with different IDs are reused by name during a merge; conflicting videos stop the import. Updating adds calendar tables and optional source-template/completion-day metadata without rewriting existing logged sets. Upgrade/reopen regression tests check both previous stored-field layouts.
 
+- Optional `bodyWeights`: UUID, local `day`, positive finite `weight` and original `unit`. Duplicate IDs/days or differing records for an already occupied day reject the whole import—there is no silent overwrite.
+- Optional set/row `kind`: `working` or `warmup`; missing means Working. A logged row must agree with its planned row's exercise and effective kind. Body weights or explicit kinds require backup v5.
 - Optional `calendarRules`: IDs, exact/weekly scope, local `startDay`/exclusive `endDay`, kind and template ID/name snapshot. Rules with overlapping weekly intervals or duplicate exact dates are rejected, including during merges.
 - Optional `walkingCompletions`: stable IDs and local `day` keys; duplicate days/conflicts abort the whole import.
 - Optional `libraryExercises`: records with `id`, `name` and optional `videoURL`. Library IDs and case-insensitive names must be unique. The store-local setup marker is not exported.

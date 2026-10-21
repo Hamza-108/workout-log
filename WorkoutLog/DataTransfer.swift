@@ -195,17 +195,58 @@ enum DataTransfer {
         }
     }
 
+    struct BodyWeight: Codable, Identifiable, Equatable {
+        var id: UUID
+        var day: String
+        var weight: Double
+        var unit: WeightUnit
+
+        init(_ model: BodyWeightEntry) throws {
+            guard let unit = WeightUnit(rawValue: model.unit) else { throw LogError(message: "Unknown body weight unit.") }
+            id = model.id
+            day = model.day
+            weight = model.weight
+            self.unit = unit
+        }
+
+        init(id: UUID, day: String, weight: Double, unit: WeightUnit) {
+            self.id = id
+            self.day = day
+            self.weight = weight
+            self.unit = unit
+        }
+
+        func model() throws -> BodyWeightEntry {
+            try BodyWeightEntry.validate(day: day, weight: weight, unit: unit.rawValue)
+            let entry = BodyWeightEntry(day: day, weight: weight, unit: unit)
+            entry.id = id
+            return entry
+        }
+    }
+
     struct Backup: Codable, Equatable {
-        var schemaVersion = 4
+        var schemaVersion = 5
         var preferredWeightUnit: WeightUnit
         var templates: [Template]
         var sessions: [Session]
         var libraryExercises: [Exercise]? = nil
         var calendarRules: [CalendarEntry]? = nil
         var walkingCompletions: [Walk]? = nil
+        var bodyWeights: [BodyWeight]? = nil
 
         func validate() throws {
-            guard (1...4).contains(schemaVersion) else { throw LogError(message: "Unsupported backup version: \(schemaVersion).") }
+            guard (1...5).contains(schemaVersion) else { throw LogError(message: "Unsupported backup version: \(schemaVersion).") }
+            if schemaVersion < 5 {
+                guard (bodyWeights ?? []).isEmpty else {
+                    throw LogError(message: "Body weight data requires backup version 5.")
+                }
+                let kinds = sessions.contains { session in
+                    session.sets.contains { $0.kind != nil } || (session.plannedSets ?? []).contains { $0.kind != nil }
+                }
+                guard !kinds else {
+                    throw LogError(message: "Set kinds require backup version 5.")
+                }
+            }
             if schemaVersion < 4 {
                 guard (calendarRules ?? []).isEmpty, (walkingCompletions ?? []).isEmpty,
                       sessions.allSatisfy({ $0.sourceTemplateID == nil && $0.completedDay == nil }) else {
@@ -218,6 +259,13 @@ enum DataTransfer {
                 throw LogError(message: "The calendar contains duplicate IDs, walking days or invalid dates.")
             }
             try Schedule.validate(rules.map { try $0.model() })
+            let body = bodyWeights ?? []
+            guard Set(body.map(\.id)).count == body.count, Set(body.map(\.day)).count == body.count else {
+                throw LogError(message: "The backup contains duplicate body weight IDs or days.")
+            }
+            for entry in body {
+                try BodyWeightEntry.validate(day: entry.day, weight: entry.weight, unit: entry.unit.rawValue)
+            }
             if schemaVersion < 3 {
                 guard (libraryExercises ?? []).isEmpty, templates.allSatisfy({ $0.videoURLs == nil }), sessions.allSatisfy({ $0.videoURLs == nil }) else {
                     throw LogError(message: "Exercise libraries and video links require backup version 3.")
@@ -265,10 +313,15 @@ enum DataTransfer {
                       planned.allSatisfy({ session.exercises.contains($0.exercise) }) else {
                     throw LogError(message: "Planned sets must have unique IDs and belong to a workout exercise.")
                 }
-                let plannedExercises = Dictionary(uniqueKeysWithValues: planned.map { ($0.id, $0.exercise) })
+                let plannedRows = Dictionary(uniqueKeysWithValues: planned.map { ($0.id, $0) })
                 for set in session.sets {
-                    if let exercise = plannedExercises[set.id], exercise != set.exercise {
-                        throw LogError(message: "A logged set does not match its planned exercise.")
+                    if let row = plannedRows[set.id] {
+                        guard row.exercise == set.exercise else {
+                            throw LogError(message: "A logged set does not match its planned exercise.")
+                        }
+                        guard row.effectiveKind == set.effectiveKind else {
+                            throw LogError(message: "A logged set does not match the kind of its planned set.")
+                        }
                     }
                     try set.validate()
                     guard session.exercises.contains(set.exercise) else {
@@ -294,9 +347,11 @@ enum DataTransfer {
         var walkingCompletions: [Walk] = []
         var skippedRules: Int = 0
         var skippedWalks: Int = 0
+        var bodyWeights: [BodyWeight] = []
+        var skippedBodyWeights: Int = 0
 
         var summary: String {
-            "Calendar assignments: \(calendarRules.count) new, \(skippedRules) already saved.\nWalking completions: \(walkingCompletions.count) new, \(skippedWalks) already saved.\nLibrary exercises: \(libraryExercises.count) new, \(skippedExercises) already saved.\nTemplates: \(templates.count) new, \(skippedTemplates) already saved.\nWorkouts: \(sessions.count) new, \(skippedSessions) already saved.\nUnfinished workouts to add: \(sessions.filter { $0.finishedAt == nil }.count)."
+            "Calendar assignments: \(calendarRules.count) new, \(skippedRules) already saved.\nWalking completions: \(walkingCompletions.count) new, \(skippedWalks) already saved.\nBody weights: \(bodyWeights.count) new, \(skippedBodyWeights) already saved.\nLibrary exercises: \(libraryExercises.count) new, \(skippedExercises) already saved.\nTemplates: \(templates.count) new, \(skippedTemplates) already saved.\nWorkouts: \(sessions.count) new, \(skippedSessions) already saved.\nUnfinished workouts to add: \(sessions.filter { $0.finishedAt == nil }.count)."
         }
     }
 
@@ -363,9 +418,14 @@ enum DataTransfer {
             $0.startDay == $1.startDay ? $0.id.uuidString < $1.id.uuidString : $0.startDay < $1.startDay
         }
         let walks = try context.fetch(FetchDescriptor<WalkingCompletion>(sortBy: [SortDescriptor(\.day)]))
+        let body = try context.fetch(FetchDescriptor<BodyWeightEntry>()).sorted {
+            $0.day == $1.day ? $0.id.uuidString < $1.id.uuidString : $0.day < $1.day
+        }
+        let bodyRecords = try body.map { try BodyWeight($0) }
         let backup = try Backup(preferredWeightUnit: unit, templates: templates.map(Template.init), sessions: sessions.map(Session.init), libraryExercises: library.isEmpty ? nil : library.map(Exercise.init),
                                 calendarRules: rules.isEmpty ? nil : rules.map(CalendarEntry.init),
-                                walkingCompletions: walks.isEmpty ? nil : walks.map(Walk.init))
+                                walkingCompletions: walks.isEmpty ? nil : walks.map(Walk.init),
+                                bodyWeights: bodyRecords.isEmpty ? nil : bodyRecords)
         try backup.validate()
         return backup
     }
@@ -428,17 +488,24 @@ enum DataTransfer {
         guard Set(combinedWalks.map(\.day)).count == combinedWalks.count else {
             throw LogError(message: "A different walking completion already exists on that day. No records were imported.")
         }
+        let body = try additions(backup.bodyWeights ?? [], existing: existing.bodyWeights ?? [])
+        let existingDays = Set((existing.bodyWeights ?? []).map(\.day))
+        let incomingDays = Set(body.map(\.day))
+        guard existingDays.isDisjoint(with: incomingDays) else {
+            throw LogError(message: "A different body weight already exists on that day. No records were imported.")
+        }
         guard (existing.sessions + sessions).filter({ $0.finishedAt == nil }).count <= 1 else {
             throw LogError(message: "Finish or discard your current workout before importing a different unfinished workout.")
         }
         return Preview(templates: templates, sessions: sessions,
                        skippedTemplates: backup.templates.count - templates.count,
                        skippedSessions: backup.sessions.count - sessions.count,
-                       restorePreference: existing.templates.isEmpty && existing.sessions.isEmpty && (existing.libraryExercises ?? []).isEmpty && (existing.calendarRules ?? []).isEmpty && (existing.walkingCompletions ?? []).isEmpty,
+                       restorePreference: existing.templates.isEmpty && existing.sessions.isEmpty && (existing.libraryExercises ?? []).isEmpty && (existing.calendarRules ?? []).isEmpty && (existing.walkingCompletions ?? []).isEmpty && (existing.bodyWeights ?? []).isEmpty,
                        libraryExercises: exercises, skippedExercises: incomingLibrary.count - exercises.count,
                        calendarRules: rules, walkingCompletions: walks,
                        skippedRules: (backup.calendarRules ?? []).count - rules.count,
-                       skippedWalks: (backup.walkingCompletions ?? []).count - walks.count)
+                       skippedWalks: (backup.walkingCompletions ?? []).count - walks.count,
+                       bodyWeights: body, skippedBodyWeights: (backup.bodyWeights ?? []).count - body.count)
     }
 
     @discardableResult
@@ -469,9 +536,11 @@ enum DataTransfer {
         }
         let rules = try preview.calendarRules.map { try $0.model() }
         let walks = preview.walkingCompletions.map { $0.model() }
+        let body = try preview.bodyWeights.map { try $0.model() }
         try context.commit {
             for rule in rules { context.insert(rule) }
             for walk in walks { context.insert(walk) }
+            for entry in body { context.insert(entry) }
             for exercise in exercises { context.insert(exercise) }
             for template in templates { context.insert(template) }
             for session in sessions { context.insert(session) }

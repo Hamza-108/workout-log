@@ -24,11 +24,11 @@ struct DataTransferView: View {
                 Button("Export backup") { export() }.accessibilityIdentifier("exportBackup")
                 Button("Import backup") { importing = true }.accessibilityIdentifier("importBackup")
             } footer: {
-                Text("Backups include calendar assignments, walking completions, the exercise library, saved templates, history and the unfinished workout. Text in an unsaved editor is not included.")
+                Text("Backups include body-weight weigh-ins, warm-up classifications, calendar assignments, walking completions, the exercise library, saved templates, history and the unfinished workout. Text in an unsaved editor is not included.")
             }
             .disabled(busy)
             Section {
-                Text("Backups are plain-text JSON containing your workout history. Choose a private Files location. Import adds missing records; it never silently replaces existing data.")
+                Text("Backups are plain-text JSON containing your workout history and body-weight records. Choose a private Files location. Import adds missing records; it never silently replaces existing data.")
             }
             if busy { ProgressView("Reading backup…") }
             if let message { Section { Text(message).accessibilityIdentifier("transferStatus") } }

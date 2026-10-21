@@ -20,7 +20,7 @@ struct HistoryView: View {
                         Text(session.templateName).font(.headline)
                         Text(session.startedAt, format: .dateTime.day().month().year().hour().minute())
                             .font(.subheadline).foregroundStyle(.secondary)
-                        Text("\(session.sets.count) sets · \(session.unit)")
+                        Text("\(session.setSummary) · \(session.unit)")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
@@ -32,11 +32,12 @@ struct HistoryView: View {
         }
         .navigationTitle("History")
         .confirmationDialog("Delete saved workout?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            Button("Delete workout", role: .destructive) {
-                guard let session = deleting else { return }
-                do { try context.commit { context.delete(session) } }
-                catch { self.error = error.localizedDescription }
-                deleting = nil
+            if let session = deleting {
+                Button("Delete workout", role: .destructive) {
+                    do { try context.commit { context.delete(session) } }
+                    catch { self.error = error.localizedDescription }
+                    deleting = nil
+                }
             }
         } message: {
             if let deleting {
@@ -78,7 +79,11 @@ private struct WorkoutDetailView: View {
                     Section(exercise) {
                         let sets = session.sets.filter { $0.exercise == exercise }
                         if sets.isEmpty { Text("No sets logged").foregroundStyle(.secondary) }
-                        ForEach(sets) { set in SetRow(set: set, unit: session.unit) }
+                        ForEach(session.rows(for: exercise)) { row in
+                            if let set = sets.first(where: { $0.id == row.id }) {
+                                SetRow(set: set, unit: session.unit, number: session.ordinal(for: row))
+                            }
+                        }
                     }
                 }
                 Section {

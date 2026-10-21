@@ -10,7 +10,7 @@ struct WorkoutLogApp: App {
 
     init() {
         _storage = State(initialValue: Result {
-            let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self])
+            let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self, BodyWeightEntry.self])
             let configuration: ModelConfiguration
             #if DEBUG
             // OS-initiated cold launches do not inherit XCTest's environment.

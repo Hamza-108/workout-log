@@ -14,7 +14,7 @@ final class TemplatePackTests: XCTestCase {
     private var otherCanonical: String { "https://www.youtube.com/watch?v=\(otherVideoID)" }
 
     private func store(url: URL? = nil) throws -> ModelContainer {
-        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self])
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self, BodyWeightEntry.self])
         let config = url.map { ModelConfiguration(schema: schema, url: $0, cloudKitDatabase: .none) }
             ?? ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: [config])
@@ -103,7 +103,7 @@ final class TemplatePackTests: XCTestCase {
         let data = try TemplatePack.encode([TemplatePack.draft(template)])
         let text = String(decoding: data, as: UTF8.self)
         XCTAssertTrue(text.contains("\"templates\""))
-        for forbidden in ["\"id\"", "sessions", "schemaVersion", "preferredWeightUnit", "startedAt", "finishedAt", "unit", "\"weight\"", "reps", "rpe"] {
+        for forbidden in ["\"id\"", "sessions", "schemaVersion", "preferredWeightUnit", "bodyWeights", "\"kind\"", "startedAt", "finishedAt", "unit", "\"weight\"", "reps", "rpe"] {
             XCTAssertFalse(text.contains(forbidden), forbidden)
         }
         XCTAssertFalse(text.contains(template.id.uuidString))
@@ -224,7 +224,7 @@ final class TemplatePackTests: XCTestCase {
         }
 
         let backup = try DataTransfer.snapshot(in: context, unit: .kg)
-        XCTAssertEqual(backup.schemaVersion, 4)
+        XCTAssertEqual(backup.schemaVersion, 5)
         XCTAssertEqual(backup.libraryExercises?.count, 2)
         XCTAssertEqual(backup.templates[0].videoURLs ?? [:], ["Bench": canonical])
         XCTAssertEqual(backup.sessions[0].videoURLs ?? [:], ["Bench": canonical])
@@ -366,7 +366,7 @@ final class TemplatePackTests: XCTestCase {
             let target = try store(url: url)
             try target.mainContext.commit { target.mainContext.insert(WorkoutTemplate(name: "Kept", exercises: ["Row"])) }
         }
-        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self])
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self, BodyWeightEntry.self])
         let config = ModelConfiguration(schema: schema, url: url, allowsSave: false, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: [config])
         let context = ModelContext(container)

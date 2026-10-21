@@ -136,7 +136,7 @@ final class ImportReviewTests: XCTestCase {
     // MARK: - Helpers
 
     private func store(url: URL? = nil) throws -> ModelContainer {
-        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self])
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self, BodyWeightEntry.self])
         let config = url.map { ModelConfiguration(schema: schema, url: $0, cloudKitDatabase: .none) }
             ?? ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: [config])
@@ -693,7 +693,7 @@ final class ImportReviewTests: XCTestCase {
                 target.mainContext.insert(LibraryExercise(name: "Row", videoURL: nil))
             }
         }
-        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self])
+        let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self, BodyWeightEntry.self])
         let config = ModelConfiguration(schema: schema, url: url, allowsSave: false, cloudKitDatabase: .none)
         let container = try ModelContainer(for: schema, configurations: [config])
         let context = ModelContext(container)
