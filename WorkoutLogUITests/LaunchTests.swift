@@ -275,7 +275,7 @@ final class LaunchTests: XCTestCase {
         app.buttons["resumeWorkout"].tap()
         XCTAssertTrue(logged.waitForExistence(timeout: 10))
         XCTAssertEqual(pending.count, 1)
-        XCTAssertTrue(app.staticTexts["2 sets saved · kg"].exists)
+        XCTAssertTrue(app.staticTexts["2 working · 0 warm-up sets · kg"].exists)
     }
 
     func testImportFormatAndCopyExampleAreVisibleInApp() {
@@ -369,6 +369,91 @@ final class LaunchTests: XCTestCase {
         app.buttons["Exercise library"].tap()
         XCTAssertTrue(app.buttons["libraryExercise-Bench"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["libraryExercise-Row"].exists)
+    }
+
+    func testPreviousHintsWarmupNumberingResumeAndLiftingProgress() {
+        let app = launchApp(backup: backupFixture)
+        app.buttons["resumeWorkout"].tap()
+        let hint = app.descendants(matching: .any).matching(identifier: "previousSet-Bench-working-1").firstMatch
+        XCTAssertTrue(hint.waitForExistence(timeout: 10))
+        XCTAssertTrue(hint.label.contains("20 kg"), hint.label)
+        XCTAssertTrue(hint.label.contains("RPE 6"), hint.label)
+        app.buttons["addWarmup-Bench"].tap()
+        XCTAssertTrue(app.textFields["setWeight"].waitForExistence(timeout: 10))
+        enter("80", in: app.textFields["setWeight"])
+        enter("10", in: app.textFields["setReps"])
+        app.buttons["saveSet"].tap()
+        let warmup = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "loggedSet", "Warm-up 1")).firstMatch
+        XCTAssertTrue(warmup.waitForExistence(timeout: 10))
+        let working = app.buttons.matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "loggedSet", "Set 1")).firstMatch
+        XCTAssertTrue(working.exists)
+        XCTAssertTrue(working.label.contains("45 lb"), working.label)
+        app.buttons["Close"].tap()
+        app.terminate()
+        app.launch()
+        app.buttons["resumeWorkout"].tap()
+        XCTAssertTrue(warmup.waitForExistence(timeout: 10))
+        XCTAssertTrue(working.exists)
+        app.buttons["finishWorkout"].tap()
+        app.buttons["Finish workout"].tap()
+        app.tabBars.buttons["Progress"].tap()
+        XCTAssertTrue(app.segmentedControls["progressMode"].waitForExistence(timeout: 10))
+        let point = app.descendants(matching: .any).matching(identifier: "liftingPoint-22222222-2222-4222-8222-222222222222").firstMatch
+        for _ in 0..<4 where !point.isHittable { app.swipeUp() }
+        XCTAssertTrue(point.waitForExistence(timeout: 10))
+        XCTAssertTrue(point.label.contains("45 lb"), point.label)
+        XCTAssertFalse(point.label.contains("80 lb"), point.label)
+    }
+
+    func testBodyWeightAddDuplicateConfirmationEditReopenAndDelete() {
+        let app = launchApp()
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let day = formatter.string(from: Date())
+        app.tabBars.buttons["Progress"].tap()
+        app.segmentedControls["progressUnit"].buttons["kg"].tap()
+        app.segmentedControls["progressMode"].buttons["Body weight"].tap()
+        app.buttons["addBodyWeight"].tap()
+        enter("80.5", in: app.textFields["bodyWeightValue"])
+        app.buttons["saveBodyWeight"].tap()
+        let row = app.buttons["bodyWeightEntry-\(day)"]
+        for _ in 0..<4 where !row.isHittable { app.swipeUp() }
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertTrue(row.label.contains("80.5 kg"), row.label)
+        app.swipeDown()
+        app.buttons["addBodyWeight"].tap()
+        enter("80", in: app.textFields["bodyWeightValue"])
+        app.buttons["saveBodyWeight"].tap()
+        XCTAssertTrue(app.buttons["Update weigh-in"].waitForExistence(timeout: 10))
+        app.buttons["Cancel"].tap()
+        app.buttons["cancelBodyWeight"].tap()
+        for _ in 0..<4 where !row.isHittable { app.swipeUp() }
+        XCTAssertTrue(row.label.contains("80.5 kg"), row.label)
+        app.swipeDown()
+        app.buttons["addBodyWeight"].tap()
+        enter("80", in: app.textFields["bodyWeightValue"])
+        app.buttons["saveBodyWeight"].tap()
+        app.buttons["Update weigh-in"].tap()
+        for _ in 0..<4 where !row.isHittable { app.swipeUp() }
+        row.tap()
+        let value = app.textFields["bodyWeightValue"]
+        XCTAssertTrue(value.waitForExistence(timeout: 10))
+        value.tap()
+        value.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 10) + "79.5")
+        app.segmentedControls["bodyWeightUnit"].buttons["lb"].tap()
+        app.buttons["saveBodyWeight"].tap()
+        app.terminate()
+        app.launch()
+        app.tabBars.buttons["Progress"].tap()
+        app.segmentedControls["progressMode"].buttons["Body weight"].tap()
+        for _ in 0..<4 where !row.isHittable { app.swipeUp() }
+        XCTAssertTrue(row.waitForExistence(timeout: 10))
+        XCTAssertTrue(row.label.contains("79.5 lb"), row.label)
+        app.buttons["deleteBodyWeight"].firstMatch.tap()
+        app.buttons["Delete weigh-in"].tap()
+        XCTAssertFalse(row.exists)
     }
 
     func testImportConflictRejectOverrideAndKeepBoth() {
