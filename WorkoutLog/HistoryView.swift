@@ -32,11 +32,12 @@ struct HistoryView: View {
         }
         .navigationTitle("History")
         .confirmationDialog("Delete saved workout?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            Button("Delete workout", role: .destructive) {
-                guard let session = deleting else { return }
-                do { try context.commit { context.delete(session) } }
-                catch { self.error = error.localizedDescription }
-                deleting = nil
+            if let session = deleting {
+                Button("Delete workout", role: .destructive) {
+                    do { try context.commit { context.delete(session) } }
+                    catch { self.error = error.localizedDescription }
+                    deleting = nil
+                }
             }
         } message: {
             if let deleting {

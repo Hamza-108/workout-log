@@ -332,6 +332,7 @@ private struct BodyWeightProgressSection: View {
         .confirmationDialog("Delete weigh-in?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             if let deleting {
                 Button("Delete weigh-in", role: .destructive) { deleteEntry(deleting) }
+                    .accessibilityIdentifier("confirmDeleteBodyWeight")
             }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -524,8 +525,10 @@ struct BodyWeightEditor: View {
         .confirmationDialog("Update existing weigh-in?", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }), titleVisibility: .visible) {
             if let pending {
                 Button("Update weigh-in") { confirmUpdate(pending) }
+                    .accessibilityIdentifier("confirmUpdateBodyWeight")
             }
             Button("Cancel", role: .cancel) { pending = nil }
+                .accessibilityIdentifier("cancelUpdateBodyWeight")
         } message: {
             if let pending {
                 Text("A weigh-in already exists for \(pending.day): \(pending.oldValue). Saving replaces it with \(pending.newValue).")

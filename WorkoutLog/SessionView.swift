@@ -51,11 +51,13 @@ struct SessionView: View {
             NavigationStack { SetEditor(session: session, exercise: selection.exercise, existing: selection.existing, setID: selection.id, kind: selection.kind) }
         }
         .confirmationDialog("Delete this set?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            Button("Delete set", role: .destructive) {
-                guard let set = deleting else { return }
-                do { try context.commit { try session.removeSet(set.id) } }
-                catch { self.error = error.localizedDescription }
-                deleting = nil
+            if let set = deleting {
+                Button("Delete set", role: .destructive) {
+                    do { try context.commit { try session.removeSet(set.id) } }
+                    catch { self.error = error.localizedDescription }
+                    deleting = nil
+                }
+                .accessibilityIdentifier("confirmDeleteSet")
             }
         }
         .confirmationDialog("Finish this workout?", isPresented: $finishing, titleVisibility: .visible) {

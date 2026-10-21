@@ -25,7 +25,7 @@ final class LaunchTests: XCTestCase {
     private func openFromSafari(_ url: URL, expecting app: XCUIApplication) {
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
         safari.launchArguments = app.launchArguments
-        safari.launch()
+        safari.activate()
         if safari.buttons["Continue"].waitForExistence(timeout: 2) { safari.buttons["Continue"].tap() }
         let address = safari.textFields.firstMatch
         XCTAssertTrue(address.waitForExistence(timeout: 10), safari.debugDescription)
@@ -272,7 +272,9 @@ final class LaunchTests: XCTestCase {
         XCTAssertEqual(pending.count, 2)
         app.buttons["plannedSet-Bench-1"].swipeLeft()
         app.buttons["Delete"].tap()
-        app.buttons["Delete set"].tap()
+        app.buttons["confirmDeleteSet"].tap()
+        let removedSet = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: app.buttons["plannedSet-Bench-2"])
+        XCTAssertEqual(XCTWaiter.wait(for: [removedSet], timeout: 10), .completed)
         XCTAssertEqual(pending.count, 1)
         app.buttons["addSet-Bench"].tap()
         enter("0", in: app.textFields["setWeight"])
@@ -440,8 +442,8 @@ final class LaunchTests: XCTestCase {
         app.buttons["addBodyWeight"].tap()
         enter("80", in: app.textFields["bodyWeightValue"])
         app.buttons["saveBodyWeight"].tap()
-        XCTAssertTrue(app.buttons["Update weigh-in"].waitForExistence(timeout: 10))
-        app.sheets["Update existing weigh-in?"].buttons["Cancel"].tap()
+        XCTAssertTrue(app.buttons["confirmUpdateBodyWeight"].waitForExistence(timeout: 10))
+        app.buttons["cancelUpdateBodyWeight"].tap()
         app.buttons["cancelBodyWeight"].tap()
         for _ in 0..<4 where !row.isHittable { app.swipeUp() }
         XCTAssertTrue(row.label.contains("80.5 kg"), row.label)
@@ -449,7 +451,7 @@ final class LaunchTests: XCTestCase {
         app.buttons["addBodyWeight"].tap()
         enter("80", in: app.textFields["bodyWeightValue"])
         app.buttons["saveBodyWeight"].tap()
-        app.buttons["Update weigh-in"].tap()
+        app.buttons["confirmUpdateBodyWeight"].tap()
         for _ in 0..<4 where !row.isHittable { app.swipeUp() }
         XCTAssertTrue(row.label.contains("80 kg"), row.label)
         row.tap()
@@ -467,7 +469,7 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: 10))
         XCTAssertTrue(row.label.contains("79.5 lb"), row.label)
         app.buttons["deleteBodyWeight"].firstMatch.tap()
-        app.buttons["Delete weigh-in"].tap()
+        app.buttons["confirmDeleteBodyWeight"].tap()
         let removed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: row)
         XCTAssertEqual(XCTWaiter.wait(for: [removed], timeout: 10), .completed)
         app.terminate()
