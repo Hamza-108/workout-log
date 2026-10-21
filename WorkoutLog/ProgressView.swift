@@ -53,6 +53,7 @@ private enum BodyWeightEditorTarget: Identifiable {
 }
 
 struct ProgressViewScreen: View {
+    var routeID: UUID? = nil
     @AppStorage("weightUnit") private var preferredUnit = WeightUnit.kg.rawValue
     @Query(filter: #Predicate<WorkoutSession> { $0.finishedAt != nil }) private var sessions: [WorkoutSession]
     @Query(sort: \BodyWeightEntry.day, order: .reverse) private var bodyWeights: [BodyWeightEntry]
@@ -68,6 +69,7 @@ struct ProgressViewScreen: View {
         }
         .navigationTitle("Progress")
         .onAppear { applyPreferenceOnce() }
+        .onChange(of: routeID) { _, id in if id != nil { editorTarget = nil } }
         .sheet(item: $editorTarget) { target in
             NavigationStack {
                 BodyWeightEditor(entry: target.entry, defaultUnit: displayUnit) {
