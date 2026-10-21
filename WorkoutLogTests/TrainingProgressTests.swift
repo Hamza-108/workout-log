@@ -56,6 +56,15 @@ final class TrainingProgressTests: XCTestCase {
         return session
     }
 
+    func testProgressFormattingKeepsFiniteExtremesAndAvoidsSignedZero() {
+        XCTAssertEqual(ProgressFormat.signed(-0.001), "0")
+        XCTAssertEqual(ProgressFormat.signed(0.001), "0")
+        XCTAssertEqual(ProgressFormat.signed(-1), "-1")
+        XCTAssertEqual(ProgressFormat.signed(30), "+30")
+        XCTAssertFalse(ProgressFormat.number(Double.greatestFiniteMagnitude).contains("Unavailable"))
+        XCTAssertEqual(ProgressFormat.number(.infinity), "Unavailable")
+    }
+
     // MARK: - Stored kinds
 
     func testStoredSetsWithoutAKindDecodeAsWorkingAndUnknownKindsAreRejected() throws {
@@ -405,6 +414,8 @@ final class TrainingProgressTests: XCTestCase {
         let sessions = try context.fetch(FetchDescriptor<WorkoutSession>())
         let points = ProgressData.lifting(exercise: "bench", sessions: sessions, unit: .kg)
         XCTAssertEqual(points.count, 3)
+        XCTAssertEqual(ProgressData.exercises(sessions: sessions), ["Bench"])
+        XCTAssertEqual(ProgressData.exercises(sessions: Array(sessions.reversed())), ["Bench"])
         // The list is sorted by date.
         XCTAssertEqual(points.map(\.date), [first, second, third])
 
@@ -472,24 +483,24 @@ final class TrainingProgressTests: XCTestCase {
         let february29 = try noon("2024-02-29", calendar: utc)
         let december31 = try noon("2023-12-31", calendar: utc)
         let september30 = try noon("2023-09-30", calendar: utc)
-        XCTAssertEqual(ProgressRange.month.start(now: march31, calendar: utc), february29)
-        XCTAssertEqual(ProgressRange.threeMonths.start(now: march31, calendar: utc), december31)
-        XCTAssertEqual(ProgressRange.sixMonths.start(now: march31, calendar: utc), september30)
+        XCTAssertEqual(ProgressRange.month.start(now: march31, calendar: utc), utc.startOfDay(for: february29))
+        XCTAssertEqual(ProgressRange.threeMonths.start(now: march31, calendar: utc), utc.startOfDay(for: december31))
+        XCTAssertEqual(ProgressRange.sixMonths.start(now: march31, calendar: utc), utc.startOfDay(for: september30))
         XCTAssertNil(ProgressRange.all.start(now: march31, calendar: utc))
 
         // The end of a month moves back to the end of the shorter month.
         let may31 = try noon("2024-05-31", calendar: utc)
-        XCTAssertEqual(ProgressRange.threeMonths.start(now: may31, calendar: utc), february29)
+        XCTAssertEqual(ProgressRange.threeMonths.start(now: may31, calendar: utc), utc.startOfDay(for: february29))
         let may31of2023 = try noon("2023-05-31", calendar: utc)
         let february28 = try noon("2023-02-28", calendar: utc)
-        XCTAssertEqual(ProgressRange.threeMonths.start(now: may31of2023, calendar: utc), february28)
+        XCTAssertEqual(ProgressRange.threeMonths.start(now: may31of2023, calendar: utc), utc.startOfDay(for: february28))
         let january31 = try noon("2024-01-31", calendar: utc)
         let july31 = try noon("2023-07-31", calendar: utc)
-        XCTAssertEqual(ProgressRange.sixMonths.start(now: january31, calendar: utc), july31)
+        XCTAssertEqual(ProgressRange.sixMonths.start(now: january31, calendar: utc), utc.startOfDay(for: july31))
         let august31 = try noon("2024-08-31", calendar: utc)
-        XCTAssertEqual(ProgressRange.sixMonths.start(now: august31, calendar: utc), february29)
+        XCTAssertEqual(ProgressRange.sixMonths.start(now: august31, calendar: utc), utc.startOfDay(for: february29))
 
-        // Calendar months retain local time across a real DST boundary.
+        // Both charts include the whole cutoff day, across real DST boundaries.
         let newYork = Schedule.calendar(timeZone: try zone("America/New_York"))
         let dstStart = try noon("2024-03-31", calendar: newYork)
         let start = try XCTUnwrap(ProgressRange.month.start(now: dstStart, calendar: newYork))
@@ -497,17 +508,17 @@ final class TrainingProgressTests: XCTestCase {
         XCTAssertEqual(parts.year, 2024)
         XCTAssertEqual(parts.month, 2)
         XCTAssertEqual(parts.day, 29)
-        XCTAssertEqual(parts.hour, 12)
-        XCTAssertEqual(start.timeIntervalSince(dstStart), -(31 * 24 - 1) * 3600)
+        XCTAssertEqual(parts.hour, 0)
+        XCTAssertEqual(start.timeIntervalSince(newYork.startOfDay(for: dstStart)), -(31 * 24 - 1) * 3600)
         let afterFallBack = try noon("2024-11-30", calendar: newYork)
         let fallStart = try XCTUnwrap(ProgressRange.month.start(now: afterFallBack, calendar: newYork))
         XCTAssertEqual(Schedule.day(fallStart, calendar: newYork), "2024-10-30")
-        XCTAssertEqual(fallStart.timeIntervalSince(afterFallBack), -(31 * 24 + 1) * 3600)
+        XCTAssertEqual(fallStart.timeIntervalSince(newYork.startOfDay(for: afterFallBack)), -(31 * 24 + 1) * 3600)
 
         // The list only shows the workouts inside the chosen range.
         let store = try container()
         let context = store.mainContext
-        let onStart = try noon("2024-02-29", calendar: utc)
+        let onStart = utc.startOfDay(for: try noon("2024-02-29", calendar: utc))
         let inside = try noon("2024-03-15", calendar: utc)
         let outside = try noon("2024-01-10", calendar: utc)
         for date in [onStart, inside, outside] {
@@ -634,8 +645,8 @@ final class TrainingProgressTests: XCTestCase {
         }
         let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self, BodyWeightEntry.self])
         let config = ModelConfiguration(schema: schema, url: url, allowsSave: false, cloudKitDatabase: .none)
-        let container = try ModelContainer(for: schema, configurations: [config])
-        let context = ModelContext(container)
+        let readOnly = try ModelContainer(for: schema, configurations: [config])
+        let context = ModelContext(readOnly)
         context.autosaveEnabled = false
 
         let failure = expectation(forNotification: .workoutSaveFailed, object: context)

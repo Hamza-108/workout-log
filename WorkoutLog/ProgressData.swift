@@ -19,7 +19,7 @@ enum ProgressRange: String, CaseIterable, Hashable {
         case .sixMonths: months = 6
         case .all: return nil
         }
-        return calendar.date(byAdding: .month, value: -months, to: now)
+        return calendar.date(byAdding: .month, value: -months, to: now).map { calendar.startOfDay(for: $0) }
     }
 }
 
@@ -59,7 +59,7 @@ enum ProgressData {
         for session in sessions where session.finishedAt != nil {
             for set in session.sets where set.effectiveKind == .working {
                 let normalized = key(set.exercise)
-                if names[normalized] == nil { names[normalized] = set.exercise }
+                names[normalized] = min(names[normalized] ?? set.exercise, set.exercise)
             }
         }
         return names.values.sorted { $0.localizedStandardCompare($1) == .orderedAscending }

@@ -21,6 +21,7 @@ enum ProgressFormat {
 
     /// Neutral, signed change. No good or bad framing.
     static func signed(_ value: Double) -> String {
+        if abs(value) < 0.005 { return "0" }
         let magnitude = number(abs(value))
         if value > 0 { return "+" + magnitude }
         if value < 0 { return "-" + magnitude }
@@ -174,7 +175,7 @@ private struct LiftingProgressSection: View {
     }
 
     private var caption: some View {
-        Text("Heaviest working set per finished session. Warm-up sets are excluded. Each exercise name is tracked separately, so a rename or a variation starts a new series.")
+        Text("Heaviest working set per finished session. Warm-up sets are excluded. Rep counts can differ: this is load, not equivalent strength. Each exercise name is tracked separately, so a rename or a variation starts a new series.")
             .font(.footnote)
             .foregroundStyle(.secondary)
     }
