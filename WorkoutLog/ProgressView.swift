@@ -330,7 +330,9 @@ private struct BodyWeightProgressSection: View {
             }
         }
         .confirmationDialog("Delete weigh-in?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
-            Button("Delete weigh-in", role: .destructive) { deleteEntry() }
+            if let deleting {
+                Button("Delete weigh-in", role: .destructive) { deleteEntry(deleting) }
+            }
             Button("Cancel", role: .cancel) {}
         } message: {
             if let deleting {
@@ -404,9 +406,8 @@ private struct BodyWeightProgressSection: View {
         return "Logged as \(ProgressFormat.weight(entry.weight, original))"
     }
 
-    private func deleteEntry() {
-        guard let deleting else { return }
-        do { try context.commit { context.delete(deleting) } }
+    private func deleteEntry(_ entry: BodyWeightEntry) {
+        do { try context.commit { context.delete(entry) } }
         catch { self.error = error.localizedDescription }
         self.deleting = nil
     }
@@ -521,7 +522,9 @@ struct BodyWeightEditor: View {
             }
         }
         .confirmationDialog("Update existing weigh-in?", isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }), titleVisibility: .visible) {
-            Button("Update weigh-in") { confirmUpdate() }
+            if let pending {
+                Button("Update weigh-in") { confirmUpdate(pending) }
+            }
             Button("Cancel", role: .cancel) { pending = nil }
         } message: {
             if let pending {
@@ -559,8 +562,7 @@ struct BodyWeightEditor: View {
     }
 
     /// Only an explicit confirmation updates a weigh-in that already exists on the chosen day.
-    private func confirmUpdate() {
-        guard let pending else { return }
+    private func confirmUpdate(_ pending: PendingWeighIn) {
         self.pending = nil
         performSave(day: pending.day, weight: pending.weight, unit: pending.unit, existingID: pending.id)
     }
