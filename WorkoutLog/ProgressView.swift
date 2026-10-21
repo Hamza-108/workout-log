@@ -442,6 +442,7 @@ private struct BodyWeightRow: View {
             .accessibilityIdentifier("bodyWeightEntry-\(entry.day)")
             Spacer()
             Button("Delete", role: .destructive, action: onDelete)
+                .buttonStyle(.borderless)
                 .accessibilityIdentifier("deleteBodyWeight")
         }
     }

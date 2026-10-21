@@ -427,7 +427,7 @@ final class LaunchTests: XCTestCase {
         enter("80", in: app.textFields["bodyWeightValue"])
         app.buttons["saveBodyWeight"].tap()
         XCTAssertTrue(app.buttons["Update weigh-in"].waitForExistence(timeout: 10))
-        app.buttons["Cancel"].tap()
+        app.sheets["Update existing weigh-in?"].buttons["Cancel"].tap()
         app.buttons["cancelBodyWeight"].tap()
         for _ in 0..<4 where !row.isHittable { app.swipeUp() }
         XCTAssertTrue(row.label.contains("80.5 kg"), row.label)

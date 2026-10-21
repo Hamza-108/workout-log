@@ -649,11 +649,28 @@ final class TrainingProgressTests: XCTestCase {
         let context = ModelContext(readOnly)
         context.autosaveEnabled = false
 
+        let savedID = try XCTUnwrap(context.fetch(FetchDescriptor<BodyWeightEntry>()).first).id
         let failure = expectation(forNotification: .workoutSaveFailed, object: context)
         XCTAssertThrowsError(try BodyWeightEntry.save(day: "2000-05-02", weight: 81, unit: .kg, in: context))
         wait(for: [failure], timeout: 1)
         XCTAssertFalse(context.hasChanges)
-        XCTAssertEqual(try context.fetchCount(FetchDescriptor<BodyWeightEntry>()), 1)
+        // Match the app: discard a failed context, whose query cache can retain rolled-back inserts.
+        let replacement = ModelContext(readOnly)
+        replacement.autosaveEnabled = false
+        XCTAssertEqual(try replacement.fetchCount(FetchDescriptor<BodyWeightEntry>()), 1)
+        let editFailure = expectation(forNotification: .workoutSaveFailed, object: replacement)
+        XCTAssertThrowsError(try BodyWeightEntry.save(day: "2024-05-01", weight: 81.2, unit: .lb,
+                                                      existingID: savedID, in: replacement))
+        wait(for: [editFailure], timeout: 1)
+        XCTAssertFalse(replacement.hasChanges)
+        let restored = ModelContext(readOnly)
+        restored.autosaveEnabled = false
+        let keptEntries = try restored.fetch(FetchDescriptor<BodyWeightEntry>())
+        XCTAssertEqual(keptEntries.count, 1)
+        let kept = try XCTUnwrap(keptEntries.first)
+        XCTAssertEqual(kept.id, savedID)
+        XCTAssertEqual(kept.weight, 80)
+        XCTAssertEqual(kept.unit, "kg")
 
         // The file on disk still holds the state from before the failed save.
         let reopened = try container(url: url)
