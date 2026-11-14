@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-struct TemplateDraft {
+struct TemplateDraft: Equatable, Sendable {
     var name: String
     var exercises: [String]
     var setCounts: [Int]
