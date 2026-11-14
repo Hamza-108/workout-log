@@ -21,11 +21,15 @@ struct CalendarView: View {
     private var assignment: CalendarRule? { Schedule.rule(on: selected, rules: rules) }
     private var draft: WorkoutSession? { sessions.first { $0.finishedAt == nil } }
     private var assignedTemplate: WorkoutTemplate? { templates.first { $0.id == assignment?.templateID } }
+    private var streak: StreakSummary {
+        StreakCalculator.summary(rules: rules, sessions: sessions, walks: walks, today: today, calendar: calendar)
+    }
 
     var body: some View {
         List {
             Section { monthGrid }
             selectedDay
+            streakSection
             Section {
                 Text("Blue: completed. Red: assigned, not completed. Future red dates are scheduled, not missed. Unassigned dates are neutral.")
                 Text("Workouts count on the actual local day you finish, not the date selected here. Older workouts without a source-template ID are not matched by name.")
@@ -113,6 +117,22 @@ struct CalendarView: View {
             } else if assignment?.kind == PlanKind.template.rawValue {
                 workoutActions
             }
+        }
+    }
+
+    private var streakSection: some View {
+        let info = streak
+        let adherenceText = info.assignedLast30Days > 0
+            ? "30-day adherence: \(info.adherencePercent)% (\(info.completedLast30Days)/\(info.assignedLast30Days) planned days)"
+            : "30-day adherence: No past assigned days yet"
+        return Section("Streak & adherence") {
+            Text("Current streak: \(info.currentStreak)d · Best: \(info.bestStreak)d")
+                .font(.subheadline.weight(.medium))
+                .accessibilityIdentifier("calendarCurrentStreak")
+            Text(adherenceText)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("calendarAdherence")
         }
     }
 

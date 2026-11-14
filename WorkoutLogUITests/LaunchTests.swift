@@ -435,6 +435,10 @@ final class LaunchTests: XCTestCase {
         XCTAssertTrue(point.waitForExistence(timeout: 10))
         XCTAssertTrue(point.label.contains("45 lb"), point.label)
         XCTAssertFalse(point.label.contains("80 lb"), point.label)
+        let pr = app.descendants(matching: .any).matching(identifier: "personalRecord-Bench").firstMatch
+        for _ in 0..<4 where !pr.isHittable { app.swipeUp() }
+        XCTAssertTrue(pr.waitForExistence(timeout: 10))
+        XCTAssertTrue(pr.label.contains("45 lb"), pr.label)
     }
 
     func testBodyWeightAddDuplicateConfirmationEditReopenAndDelete() {
@@ -595,6 +599,8 @@ final class LaunchTests: XCTestCase {
         app.buttons["markWalkDone"].tap()
         XCTAssertTrue(app.buttons["undoWalkDone"].waitForExistence(timeout: 10))
         XCTAssertEqual(app.staticTexts["calendarStatus"].label, "Completed")
+        XCTAssertEqual(app.staticTexts["calendarCurrentStreak"].label, "Current streak: 1d · Best: 1d")
+        XCTAssertEqual(app.staticTexts["calendarAdherence"].label, "30-day adherence: 100% (1/1 planned days)")
         app.swipeUp()
         app.swipeDown()
         XCTAssertTrue(app.buttons["calendarToday"].isHittable)
