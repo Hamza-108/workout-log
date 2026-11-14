@@ -32,6 +32,7 @@ struct CalendarView: View {
             }.font(.footnote).foregroundStyle(.secondary)
         }
         .navigationTitle("Calendar")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar { Button("Today") { showToday() }.accessibilityIdentifier("calendarToday") }
         .sheet(isPresented: $assigning) {
             NavigationStack { CalendarAssignmentEditor(day: selected, current: assignment) }
@@ -45,7 +46,8 @@ struct CalendarView: View {
     }
 
     private var monthGrid: some View {
-        VStack(spacing: 8) {
+        let dates = monthDates
+        return VStack(spacing: 8) {
             HStack {
                 Button { moveMonth(-1) } label: { Image(systemName: "chevron.left").frame(width: 44, height: 44) }
                     .accessibilityLabel("Previous month").accessibilityIdentifier("calendarPreviousMonth")
@@ -55,14 +57,22 @@ struct CalendarView: View {
                 Button { moveMonth(1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 44) }
                     .accessibilityLabel("Next month").accessibilityIdentifier("calendarNextMonth")
             }.buttonStyle(.borderless)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 4) {
-                ForEach(0..<7, id: \.self) { index in
-                    Text(calendar.veryShortStandaloneWeekdaySymbols[(calendar.firstWeekday - 1 + index) % 7])
-                        .font(.caption).foregroundStyle(.secondary).accessibilityHidden(true)
+            VStack(spacing: 4) {
+                HStack(spacing: 2) {
+                    ForEach(0..<7, id: \.self) { index in
+                        Text(calendar.veryShortStandaloneWeekdaySymbols[(calendar.firstWeekday - 1 + index) % 7])
+                            .font(.caption).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .accessibilityHidden(true)
+                    }
                 }
-                ForEach(Array(monthDates.enumerated()), id: \.offset) { _, date in
-                    if let date { dayButton(date) }
-                    else { Color.clear.frame(height: 44).accessibilityHidden(true) }
+                ForEach(0..<(dates.count / 7), id: \.self) { week in
+                    HStack(spacing: 2) {
+                        ForEach(0..<7, id: \.self) { day in
+                            if let date = dates[week * 7 + day] { dayButton(date) }
+                            else { Color.clear.frame(maxWidth: .infinity, minHeight: 44).accessibilityHidden(true) }
+                        }
+                    }
                 }
             }
         }
