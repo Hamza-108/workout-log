@@ -249,4 +249,22 @@ final class DataTransferTests: XCTestCase {
         let session = try WorkoutSession.start(template: template, unit: .kg, in: db.mainContext)
         XCTAssertNil(session.plannedSets)
     }
+
+    func testEmptyWorkoutBackupRoundTrip() throws {
+        let source = try store()
+        let finished = try WorkoutSession.startEmpty(unit: .kg, in: source.mainContext)
+        try source.mainContext.commit {
+            try finished.addExercises([LibraryExercise(name: "Squat")])
+            try finished.record(LoggedSet(exercise: "Squat", weight: 100, reps: 5, rpe: 8))
+            try finished.finish()
+        }
+        let draft = try WorkoutSession.startEmpty(unit: .lb, in: source.mainContext)
+        XCTAssertTrue(draft.exercises.isEmpty)
+        let backup = try DataTransfer.snapshot(in: source.mainContext, unit: .lb)
+        let decoded = try DataTransfer.decode(DataTransfer.encode(backup))
+        XCTAssertEqual(decoded, backup)
+        let target = try store()
+        try DataTransfer.apply(decoded, in: target.mainContext)
+        XCTAssertEqual(try DataTransfer.snapshot(in: target.mainContext, unit: .lb), backup)
+    }
 }

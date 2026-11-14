@@ -202,6 +202,32 @@ final class WorkoutSession {
         return session
     }
 
+    static func startEmpty(unit: WeightUnit, in context: ModelContext) throws -> WorkoutSession {
+        let drafts = try context.fetch(FetchDescriptor<WorkoutSession>(predicate: #Predicate { $0.finishedAt == nil }))
+        guard drafts.isEmpty else { throw LogError(message: "Resume or discard your current workout before starting another.") }
+        let session = WorkoutSession(templateName: "Empty workout", exercises: [], unit: unit)
+        try context.commit { context.insert(session) }
+        return session
+    }
+
+    func addExercises(_ incoming: [LibraryExercise]) throws {
+        guard finishedAt == nil else { throw LogError(message: "This workout is already finished.") }
+        guard !incoming.isEmpty else { throw LogError(message: "Select at least one exercise.") }
+        var current = exercises
+        var seen = Set(current.map { $0.lowercased() })
+        var links = videoURLs ?? [:]
+        for item in incoming {
+            let (name, video) = try LibraryExercise.validated(name: item.name, videoURL: item.videoURL)
+            guard seen.insert(name.lowercased()).inserted else {
+                throw LogError(message: "Use each exercise name only once in a workout.")
+            }
+            current.append(name)
+            if let video { links[name] = video }
+        }
+        exercises = current
+        videoURLs = links.isEmpty ? nil : links
+    }
+
     func record(_ set: LoggedSet) throws {
         guard finishedAt == nil else { throw LogError(message: "This workout is already finished.") }
         try set.validate()

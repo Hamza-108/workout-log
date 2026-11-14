@@ -15,6 +15,7 @@ struct SessionView: View {
     @Bindable var session: WorkoutSession
     @Query(filter: #Predicate<WorkoutSession> { $0.finishedAt != nil }) private var history: [WorkoutSession]
     @State private var selection: SetSelection?
+    @State private var pickingExercises = false
     @State private var deleting: PlannedSet?
     @State private var discarding = false
     @State private var finishing = false
@@ -29,8 +30,18 @@ struct SessionView: View {
             } footer: {
                 Text("Logged sets save immediately. You can close and resume this workout later.")
             }
+            if session.exercises.isEmpty {
+                Section {
+                    Text("Add an exercise to start logging sets.")
+                        .foregroundStyle(.secondary)
+                }
+            }
             ForEach(session.exercises, id: \.self) { exercise in
                 exerciseSection(exercise)
+            }
+            Section {
+                Button("Add exercises", systemImage: "plus") { pickingExercises = true }
+                    .accessibilityIdentifier("addSessionExercises")
             }
             Section {
                 Button("Discard workout", role: .destructive) { discarding = true }
@@ -49,6 +60,14 @@ struct SessionView: View {
         }
         .sheet(item: $selection) { selection in
             NavigationStack { SetEditor(session: session, exercise: selection.exercise, existing: selection.existing, setID: selection.id, kind: selection.kind) }
+        }
+        .sheet(isPresented: $pickingExercises) {
+            NavigationStack {
+                ExercisePicker(excluding: Set(session.exercises.map { $0.lowercased() })) { selected in
+                    do { try context.commit { try session.addExercises(selected) } }
+                    catch { self.error = error.localizedDescription }
+                }
+            }
         }
         .confirmationDialog("Delete this set?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
             if let set = deleting {

@@ -253,6 +253,22 @@ final class LaunchTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["startWorkout-Push day"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["resumeWorkout"].exists)
+        app.buttons["startEmptyWorkout"].tap()
+        XCTAssertTrue(app.buttons["addSessionExercises"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.buttons["finishWorkout"].isEnabled)
+        app.buttons["addSessionExercises"].tap()
+        XCTAssertTrue(app.buttons["pickExercise-Bench"].waitForExistence(timeout: 10))
+        app.buttons["pickExercise-Bench"].tap()
+        app.buttons["addSelectedExercises"].tap()
+        XCTAssertTrue(app.buttons["addSet-Bench"].waitForExistence(timeout: 10))
+        app.buttons["addSet-Bench"].tap()
+        enter("40", in: app.textFields["setWeight"])
+        enter("6", in: app.textFields["setReps"])
+        app.buttons["saveSet"].tap()
+        app.buttons["finishWorkout"].tap()
+        app.buttons["Finish workout"].tap()
+        app.tabBars.buttons["History"].tap()
+        XCTAssertTrue(app.buttons["history-Empty workout"].waitForExistence(timeout: 10))
     }
 
     func testPresetRowsCanBeLoggedRemovedAddedAndResumed() {
