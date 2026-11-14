@@ -7,16 +7,20 @@ struct WorkoutLogApp: App {
     @State private var saveError: String?
     @State private var importState = TemplateImportState()
     @State private var activities = WorkoutActivityController()
+    @State private var leaderboardStore: LeaderboardStore
 
     init() {
+        #if DEBUG
+        if let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"], UUID(uuidString: testID) != nil {
+            UserDefaults.standard.set(testID, forKey: "WorkoutLogUITestStore")
+        }
+        #endif
+        _leaderboardStore = State(initialValue: LeaderboardStore())
         _storage = State(initialValue: Result {
             let schema = Schema([WorkoutTemplate.self, WorkoutSession.self, LibraryExercise.self, LibrarySetup.self, CalendarRule.self, WalkingCompletion.self, BodyWeightEntry.self])
             let configuration: ModelConfiguration
             #if DEBUG
             // OS-initiated cold launches do not inherit XCTest's environment.
-            if let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"], UUID(uuidString: testID) != nil {
-                UserDefaults.standard.set(testID, forKey: "WorkoutLogUITestStore")
-            }
             if let testID = ProcessInfo.processInfo.environment["WORKOUT_LOG_TEST_STORE"] ?? UserDefaults.standard.string(forKey: "WorkoutLogUITestStore"), UUID(uuidString: testID) != nil {
                 configuration = ModelConfiguration(schema: schema, url: FileManager.default.temporaryDirectory.appendingPathComponent("WorkoutLog-\(testID).store"), cloudKitDatabase: .none)
             } else {
@@ -74,6 +78,7 @@ struct WorkoutLogApp: App {
             }
             .environment(activities)
             .environment(importState)
+            .environment(leaderboardStore)
             .onReceive(NotificationCenter.default.publisher(for: .workoutSaveFailed)) { notification in
                 guard case .success(let data) = storage,
                       let failed = notification.object as? ModelContext, failed === data.context else { return }

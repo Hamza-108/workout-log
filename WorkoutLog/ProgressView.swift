@@ -113,6 +113,7 @@ struct ProgressViewScreen: View {
         switch mode {
         case .lifting:
             LiftingProgressSection(sessions: sessions, range: range, unit: displayUnit)
+            PersonalRecordsSection(sessions: sessions, unit: displayUnit)
         case .bodyWeight:
             BodyWeightProgressSection(entries: bodyWeights, range: range, unit: displayUnit,
                                       onAdd: { editorTarget = .create(UUID()) },
@@ -275,6 +276,50 @@ private struct LiftingPointRow: View {
                 .font(.subheadline)
             if point.originalUnit != unit {
                 Text("Logged as \(ProgressFormat.weight(point.originalWeight, point.originalUnit))")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct PersonalRecordsSection: View {
+    let sessions: [WorkoutSession]
+    let unit: WeightUnit
+
+    private var records: [PersonalRecord] {
+        StreakCalculator.personalRecords(sessions: sessions)
+    }
+
+    var body: some View {
+        if !records.isEmpty {
+            Section("Personal records (working sets)") {
+                ForEach(records) { record in
+                    PersonalRecordRow(record: record, unit: unit)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("personalRecord-\(record.exercise)")
+                }
+            }
+        }
+    }
+}
+
+private struct PersonalRecordRow: View {
+    let record: PersonalRecord
+    let unit: WeightUnit
+
+    private var displayedWeight: Double {
+        record.convertedWeight(to: unit) ?? record.weight
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(record.exercise).font(.headline)
+            Text("\(ProgressFormat.weight(displayedWeight, unit)) · \(record.reps) reps · RPE \(ProgressFormat.number(record.rpe))")
+                .font(.subheadline)
+            Text(ProgressFormat.shortDate(record.achievedAt))
+                .font(.caption).foregroundStyle(.secondary)
+            if record.unit != unit {
+                Text("Logged as \(ProgressFormat.weight(record.weight, record.unit))")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

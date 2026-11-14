@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-struct TemplateDraft {
+struct TemplateDraft: Equatable, Sendable {
     var name: String
     var exercises: [String]
     var setCounts: [Int]
@@ -295,7 +295,7 @@ enum DataTransfer {
                 try VideoLink.validate(template.videoURLs, exercises: template.exercises)
             }
             for session in sessions {
-                try DataTransfer.validateNames(session.templateName, exercises: session.exercises)
+                try DataTransfer.validateNames(session.templateName, exercises: session.exercises, allowEmptyExercises: session.finishedAt == nil)
                 try VideoLink.validate(session.videoURLs, exercises: session.exercises)
                 if let day = session.completedDay {
                     guard session.finishedAt != nil, Schedule.validDay(day) else { throw LogError(message: "Invalid workout completion day.") }
@@ -403,7 +403,15 @@ enum DataTransfer {
         return formatter
     }
 
-    private static func validateNames(_ name: String, exercises: [String]) throws {
+    private static func validateNames(_ name: String, exercises: [String], allowEmptyExercises: Bool = false) throws {
+        if allowEmptyExercises && exercises.isEmpty {
+            let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleanName.isEmpty else { throw LogError(message: "Give the template a name.") }
+            guard cleanName == name else {
+                throw LogError(message: "Backup names must not contain leading or trailing whitespace.")
+            }
+            return
+        }
         let (cleanName, cleanExercises) = try WorkoutTemplate.validated(name: name, exercises: exercises)
         guard cleanName == name, cleanExercises == exercises else {
             throw LogError(message: "Backup names must not contain leading or trailing whitespace.")

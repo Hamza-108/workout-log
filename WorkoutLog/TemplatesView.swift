@@ -44,6 +44,13 @@ struct TemplatesView: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityLabel("Weight unit for new workouts")
+                Button {
+                    startEmpty()
+                } label: {
+                    Label("Start empty workout", systemImage: "plus.circle")
+                }
+                .disabled(!drafts.isEmpty)
+                .accessibilityIdentifier("startEmptyWorkout")
             } footer: {
                 Text("Saved workouts keep their original units.")
             }
@@ -152,6 +159,15 @@ struct TemplatesView: View {
     private func start(_ template: WorkoutTemplate) {
         do {
             let session = try WorkoutSession.start(template: template, unit: WeightUnit(rawValue: unit) ?? .kg, in: context)
+            resume(session)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
+    private func startEmpty() {
+        do {
+            let session = try WorkoutSession.startEmpty(unit: WeightUnit(rawValue: unit) ?? .kg, in: context)
             resume(session)
         } catch {
             self.error = error.localizedDescription

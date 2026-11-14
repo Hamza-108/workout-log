@@ -175,4 +175,36 @@ final class ModelTests: XCTestCase {
         XCTAssertEqual(completed.sets, [set])
         XCTAssertEqual(completed.unit, "kg")
     }
+
+    func testEmptyWorkoutStartAddExercisesAndFinish() throws {
+        let store = try container()
+        let context = store.mainContext
+        let session = try WorkoutSession.startEmpty(unit: .lb, in: context)
+        XCTAssertEqual(session.templateName, "Empty workout")
+        XCTAssertEqual(session.exercises, [])
+        XCTAssertEqual(session.unit, "lb")
+        XCTAssertNil(session.sourceTemplateID)
+        XCTAssertNil(session.plannedSets)
+        XCTAssertThrowsError(try WorkoutSession.startEmpty(unit: .kg, in: context))
+        XCTAssertThrowsError(try session.finish())
+        XCTAssertThrowsError(try session.addExercises([]))
+
+        let bench = LibraryExercise(name: " Bench ", videoURL: "https://youtu.be/abcdefghijk?t=90s")
+        let row = LibraryExercise(name: "Row")
+        try context.commit {
+            try session.addExercises([bench, row])
+        }
+        XCTAssertEqual(session.exercises, ["Bench", "Row"])
+        XCTAssertEqual(session.videoURLs, ["Bench": "https://www.youtube.com/watch?v=abcdefghijk&t=90"])
+        XCTAssertThrowsError(try session.addExercises([LibraryExercise(name: "bench")]))
+
+        let set = LoggedSet(exercise: "Bench", weight: 135, reps: 5, rpe: 8)
+        try context.commit {
+            try session.record(set)
+            try session.finish()
+        }
+        XCTAssertNotNil(session.finishedAt)
+        XCTAssertEqual(session.sets, [set])
+        XCTAssertThrowsError(try session.addExercises([LibraryExercise(name: "Squat")]))
+    }
 }
