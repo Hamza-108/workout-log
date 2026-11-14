@@ -242,3 +242,98 @@ struct LeaderboardProfileConfig: Codable, Equatable, Sendable {
         return payload
     }
 }
+
+struct LeaderboardRankedEntry: Equatable, Identifiable, Sendable {
+    var id: UUID { member.userID }
+    var rank: Int
+    var member: SharedProfilePayload
+}
+
+struct LeaderboardResponse: Codable, Equatable, Sendable {
+    var schemaVersion: Int = 1
+    var generatedAt: String
+    var members: [SharedProfilePayload]
+
+    func validate() throws {
+        guard schemaVersion == 1 else {
+            throw LogError(message: "Unsupported leaderboard response version: \(schemaVersion).")
+        }
+        _ = try DataTransfer.date(generatedAt)
+        var seen: Set<UUID> = []
+        for member in members {
+            try member.validate()
+            guard seen.insert(member.userID).inserted else {
+                throw LogError(message: "Duplicate user ID in leaderboard response.")
+            }
+        }
+    }
+}
+
+enum LeaderboardRanking {
+    static func rank(_ members: [SharedProfilePayload]) -> [LeaderboardRankedEntry] {
+        let sorted = members.sorted(by: comesBefore)
+        return sorted.enumerated().map { index, member in
+            LeaderboardRankedEntry(rank: index + 1, member: member)
+        }
+    }
+
+    static func comesBefore(_ lhs: SharedProfilePayload, _ rhs: SharedProfilePayload) -> Bool {
+        if lhs.currentStreak != rhs.currentStreak {
+            return lhs.currentStreak > rhs.currentStreak
+        }
+        if lhs.adherencePercent != rhs.adherencePercent {
+            return lhs.adherencePercent > rhs.adherencePercent
+        }
+        if lhs.bestStreak != rhs.bestStreak {
+            return lhs.bestStreak > rhs.bestStreak
+        }
+        if lhs.completedLast30Days != rhs.completedLast30Days {
+            return lhs.completedLast30Days > rhs.completedLast30Days
+        }
+        let nameOrder = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
+        if nameOrder != .orderedSame {
+            return nameOrder == .orderedAscending
+        }
+        return lhs.userID.uuidString < rhs.userID.uuidString
+    }
+}
+
+struct LeaderboardServerConfig: Codable, Equatable, Sendable {
+    var baseURLString: String
+    var groupToken: String
+
+    init(baseURLString: String = "", groupToken: String = "") {
+        self.baseURLString = baseURLString
+        self.groupToken = groupToken
+    }
+
+    var isConfigured: Bool {
+        !baseURLString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !groupToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func validatedBaseURL() throws -> URL {
+        var trimmed = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        while trimmed.hasSuffix("/") {
+            trimmed.removeLast()
+        }
+        guard !trimmed.isEmpty,
+              let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "https" || scheme == "http",
+              let host = url.host, !host.isEmpty else {
+            throw LogError(message: "Enter a valid server URL starting with https:// or http://.")
+        }
+        return url
+    }
+
+    func validatedToken() throws -> String {
+        let trimmed = groupToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              !trimmed.contains(where: { $0.isNewline }) else {
+            throw LogError(message: "Enter a valid group token.")
+        }
+        return trimmed
+    }
+}
+

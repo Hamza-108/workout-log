@@ -35,6 +35,8 @@ struct WorkoutHomeView: View {
                 .tabItem { Label("Calendar", systemImage: "calendar") }.tag(2)
             NavigationStack { ProgressViewScreen(routeID: resumeID) }
                 .tabItem { Label("Progress", systemImage: "chart.xyaxis.line") }.tag(3)
+            NavigationStack { LeaderboardView(routeID: resumeID) }
+                .tabItem { Label("Leaderboard", systemImage: "trophy") }.tag(4)
             NavigationStack { HistoryView() }
                 .tabItem { Label("History", systemImage: "clock") }.tag(1)
         }
